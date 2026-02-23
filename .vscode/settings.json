@@ -1,0 +1,9 @@
+{
+    "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.default.compilerPath": "/usr/bin/clang",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/src",
+        "/opt/homebrew/include",
+        "/usr/local/include"
+    ]
+}
