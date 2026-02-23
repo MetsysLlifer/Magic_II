@@ -2,7 +2,6 @@ CC = clang
 
 SRC_DIR = src
 
-# Basic flags (uses raylib installed on macOS via Homebrew)
 CFLAGS = -Wall -Wextra -O3 -std=c99 -I$(SRC_DIR) -I/opt/homebrew/include
 LDFLAGS = -L/opt/homebrew/lib -lraylib -framework IOKit -framework Cocoa -framework OpenGL
 
