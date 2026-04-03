@@ -2,27 +2,40 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
-// NEW: Procedural Electricity Generator
-void DrawChargeSparks(int x, int y, int z, float charge, float alpha) {
-    if (charge < 10.0f || alpha <= 0.0f) return;
+// UPGRADED: Contained Plasma Discharge (Noble Gas Tube Effect)
+void DrawChargeSparks(int x, int y, int z, float charge, float density, float alpha) {
+    if (charge < 5.0f || alpha <= 0.0f) return;
     
-    // Fast flickering time baseline
-    float t = GetTime() * 25.0f; 
-    
-    // Pseudo-random chaotic offsets using Sin/Cos interference patterns
-    float ox1 = sinf(t + x * 1.3f + y * 0.7f) * (PIXEL_SIZE * 0.9f);
-    float oy1 = cosf(t * 1.1f + x * 0.8f + y * 1.5f) * (PIXEL_SIZE * 0.9f);
-    float ox2 = sinf(t * 1.4f - x * 1.1f + y * 0.9f) * (PIXEL_SIZE * 0.9f);
-    float oy2 = cosf(t * 0.9f - x * 1.4f - y * 1.2f) * (PIXEL_SIZE * 0.9f);
-
+    float t = GetTime() * 20.0f; 
     int yOffset = (z == LAYER_AIR) ? FLOAT_OFFSET : 0;
-    Vector2 start = { x * PIXEL_SIZE + (PIXEL_SIZE / 2.0f) + ox1, (y * PIXEL_SIZE) - yOffset + (PIXEL_SIZE / 2.0f) + oy1 };
-    Vector2 end = { x * PIXEL_SIZE + (PIXEL_SIZE / 2.0f) + ox2, (y * PIXEL_SIZE) - yOffset + (PIXEL_SIZE / 2.0f) + oy2 };
-
-    unsigned char opacity = (unsigned char)(fmin(255, charge * 5) * alpha);
     
-    // Draw the jagged spark
-    DrawLineEx(start, end, 1.0f, (Color){220, 200, 255, opacity}); // Bright violet-white static
+    // BUG FIX: Apply 2.5D height offset so plasma renders ON TOP of solid ground objects
+    if (z == LAYER_GROUND && density > 60.0f) {
+        yOffset += (int)(density / 10.0f);
+    }
+    
+    // The "Core" of the cell, properly offset to the visual top face
+    Vector2 core = { x * PIXEL_SIZE + (PIXEL_SIZE / 2.0f), (y * PIXEL_SIZE) - yOffset + (PIXEL_SIZE / 2.0f) };
+
+    // Confine the animation strictly to the cell bounds 
+    float bound = PIXEL_SIZE * 0.8f; 
+    
+    // Draw 2 internal arcing plasma strands
+    for (int i = 0; i < 2; i++) {
+        // Chaotic rotation using sine interference
+        float angle1 = t + (x * 0.3f) + (y * 0.7f) + (i * PI);
+        float angle2 = -t + (x * 0.8f) - (y * 0.4f) + (i * PI);
+
+        // Modulate length so it snaps and flickers internally
+        float r1 = bound * fmodf(fabsf(sinf(t * 0.5f + i)), 1.0f);
+        float r2 = bound * fmodf(fabsf(cosf(t * 0.5f + i)), 1.0f);
+
+        Vector2 p1 = { core.x + cosf(angle1) * r1, core.y + sinf(angle1) * r1 };
+        Vector2 p2 = { core.x + cosf(angle2) * r2, core.y + sinf(angle2) * r2 };
+
+        unsigned char opacity = (unsigned char)(fmin(255, charge * 5) * alpha);
+        DrawLineEx(p1, p2, 1.0f, (Color){220, 150, 255, opacity});
+    }
 }
 
 Color GetCellColor(Cell c) {
@@ -48,6 +61,7 @@ void DrawMaterialRealm(float alpha) {
             Color color = Fade(GetCellColor(c), alpha); 
             
             if (color.a > 0) {
+                // 2.5D WALL RENDERING
                 if (c.density > 60.0f && c.cohesion > 80.0f) {
                     int heightOffset = (int)(c.density / 10.0f); 
                     DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE + heightOffset, ColorBrightness(color, -0.4f));
@@ -57,8 +71,8 @@ void DrawMaterialRealm(float alpha) {
                 }
             }
             
-            // Render Ground Sparks
-            DrawChargeSparks(x, y, LAYER_GROUND, c.charge, alpha);
+            // Draw Ground Plasma (Passing density to calculate Z-Offset)
+            DrawChargeSparks(x, y, LAYER_GROUND, c.charge, c.density, alpha);
         }
     }
 
@@ -71,8 +85,8 @@ void DrawMaterialRealm(float alpha) {
                 if (airColor.a > 0) DrawRectangle(x * PIXEL_SIZE, (y * PIXEL_SIZE) - FLOAT_OFFSET, PIXEL_SIZE, PIXEL_SIZE, airColor);
             }
             
-            // Render Air Sparks
-            DrawChargeSparks(x, y, LAYER_AIR, airCell.charge, alpha);
+            // Draw Air Plasma
+            DrawChargeSparks(x, y, LAYER_AIR, airCell.charge, airCell.density, alpha);
         }
     }
 }
@@ -93,8 +107,8 @@ void DrawEnergyRealm(float alpha) {
                 int yOffset = (z == LAYER_AIR) ? FLOAT_OFFSET : 0;
                 DrawRectangle(x * PIXEL_SIZE, (y * PIXEL_SIZE) - yOffset, PIXEL_SIZE, PIXEL_SIZE, (Color){r, g, b, (unsigned char)(150 * alpha)});
                 
-                // Static renders brightly in the energy realm too
-                DrawChargeSparks(x, y, z, c.charge, alpha);
+                // Plasma renders brightly in the energy realm too
+                DrawChargeSparks(x, y, z, c.charge, c.density, alpha);
             }
         }
     }
@@ -110,12 +124,12 @@ void DrawProjectiles() {
             DrawCircle(pCenter.x, pCenter.y, 4 + pulse, GOLD);
             DrawCircleLines(pCenter.x, pCenter.y, 6 + pulse, RAYWHITE);
             
-            // Add sparking trails to charged projectiles
+            // Tighter, contained trailing spark for charged projectiles
             if (projectiles[i].payload.charge > 10.0f) {
                 float t = GetTime() * 30.0f;
-                float ox = sinf(t + i) * 8.0f;
-                float oy = cosf(t * 1.5f + i) * 8.0f;
-                DrawLineEx(pCenter, (Vector2){pCenter.x + ox, pCenter.y + oy}, 2.0f, (Color){200, 150, 255, 200});
+                float ox = sinf(t + i) * 4.0f;
+                float oy = cosf(t * 1.5f + i) * 4.0f;
+                DrawLineEx(pCenter, (Vector2){pCenter.x + ox, pCenter.y + oy}, 1.5f, (Color){200, 150, 255, 200});
             }
             
             if (projectiles[i].layer == LAYER_AIR) DrawEllipse(projectiles[i].pos.x, projectiles[i].pos.y, 4, 2, Fade(BLACK, 0.5f));
@@ -148,6 +162,7 @@ void DrawInterface(Player *p, SpellDNA *draft) {
     DrawText((p->castLayer == LAYER_AIR) ? "Z-TARGET: AIR [SHIFT]" : "Z-TARGET: GROUND [SHIFT]", 10, 160, 12, targetColor);
     DrawText("`=Craft | ESC=Guide | [ / ]=Blend", 10, 175, 10, GRAY);
 
+    // Procedural Charge Animation around the player
     if (p->isCharging) {
         float maxCharge = 3.0f;
         float radius = 10.0f + (p->chargeLevel / maxCharge) * 30.0f;
@@ -157,19 +172,20 @@ void DrawInterface(Player *p, SpellDNA *draft) {
         DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
         DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
 
-        // Player emits static electricity based on the spell's charge!
+        // Player emits a contained plasma field based on the spell's charge!
         if (activeDNA.charge > 10.0f) {
             float t = GetTime() * 40.0f;
-            float sparkRadius = radius + 5.0f;
+            float sparkRadius = radius + 3.0f;
             for(int i = 0; i < 3; i++) {
                 float angle = (t + i * 2.0f);
                 float ox = sinf(angle * 1.3f) * sparkRadius;
                 float oy = cosf(angle * 0.7f) * sparkRadius;
-                DrawLineEx(cCenter, (Vector2){cCenter.x + ox, cCenter.y + oy}, 2.0f, (Color){200, 150, 255, 255});
+                DrawLineEx(cCenter, (Vector2){cCenter.x + ox, cCenter.y + oy}, 1.5f, (Color){200, 150, 255, 255});
             }
         }
     }
 
+    // Crafting Compiler Menu
     if (p->isCrafting && !p->showGuide) {
         DrawRectangle(200, 50, 420, 400, Fade(BLACK, 0.95f));
         DrawRectangleLines(200, 50, 420, 400, GOLD);
@@ -183,14 +199,14 @@ void DrawInterface(Player *p, SpellDNA *draft) {
         int fx = (draft->form == 0) ? 250 : (draft->form == 1) ? 340 : 430;
         DrawRectangleLines(fx, 120, 80, 25, GREEN);
 
-        GuiSlider((Rectangle){250, 160, 200, 20}, "TEMP", NULL, &draft->temp, -100, 200);
-        GuiSlider((Rectangle){250, 190, 200, 20}, "MASS", NULL, &draft->density, 0, 100);
-        GuiSlider((Rectangle){250, 220, 200, 20}, "COHE", NULL, &draft->cohesion, 0, 100);
-        GuiSlider((Rectangle){250, 250, 200, 20}, "WET ", NULL, &draft->moisture, 0, 100);
-        GuiSlider((Rectangle){250, 280, 200, 20}, "CHRG", NULL, &draft->charge, 0, 100);
-        GuiCheckBox((Rectangle){250, 320, 20, 20}, "ETERNAL", &draft->isPermanent);
+        GuiSlider((Rectangle){250, 160, 200, 20}, "TEMP (Heat)", NULL, &draft->temp, -100, 200);
+        GuiSlider((Rectangle){250, 190, 200, 20}, "MASS (Dens)", NULL, &draft->density, 0, 100);
+        GuiSlider((Rectangle){250, 220, 200, 20}, "COHE (Bind)", NULL, &draft->cohesion, 0, 100);
+        GuiSlider((Rectangle){250, 250, 200, 20}, "WET  (Fluid)", NULL, &draft->moisture, 0, 100);
+        GuiSlider((Rectangle){250, 280, 200, 20}, "CHRG (Volt)", NULL, &draft->charge, 0, 100);
+        GuiCheckBox((Rectangle){250, 320, 20, 20}, "ETERNAL (Permanent)", &draft->isPermanent);
 
-        if (GuiButton((Rectangle){250, 360, 120, 40}, "IMPRINT")) {
+        if (GuiButton((Rectangle){250, 360, 120, 40}, "IMPRINT TO SLOT")) {
             p->hotbar[p->activeSlot] = *draft;
             p->isCrafting = false;
         }
