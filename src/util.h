@@ -10,18 +10,23 @@
 #define WIDTH (800 / PIXEL_SIZE)
 #define HEIGHT (450 / PIXEL_SIZE)
 
+// Universal Field Variables
 typedef struct {
-    float temp;      // Thermal
-    float density;   // Mass
-    float moisture;  // Fluidity
-    Vector2 velocity; 
-    bool permanent;  // If true, energy does not decay
+    float temp;      // Thermal Energy
+    float density;   // Mass per volume
+    float moisture;  // Wetness/Fluidity
+    float cohesion;  // How strongly atoms bind (100 = Solid, 0 = Gas)
+    float charge;    // Electrical potential
+    Vector2 velocity; // Kinetic movement across XY plane
+    bool permanent;  // Does not naturally decay
 } Cell;
 
 typedef struct {
     float temp;
     float density;
     float moisture;
+    float cohesion;
+    float charge;
     Vector2 velocity;
     bool isPermanent;
 } SpellDNA;
@@ -31,7 +36,11 @@ typedef struct {
     float speed;
     int activeSlot;
     SpellDNA hotbar[10];
+    
+    // UI States
     bool isCrafting;
+    bool showGuide;
+    bool energyVision; // Toggle between Material (Naked Eye) and Energy Realm
 } Player;
 
 extern Cell grid[WIDTH * HEIGHT];
@@ -39,8 +48,10 @@ extern Cell prev_grid[WIDTH * HEIGHT];
 
 void InitSimulation();
 void UpdateSimulation(float dt);
-void DrawSimulation();
+void DrawMaterialRealm();
+void DrawEnergyRealm();
 void DrawInterface(Player *p, SpellDNA *draft);
+void DrawGuideMenu(Player *p);
 void InjectEnergy(int x, int y, SpellDNA dna);
 
 #endif

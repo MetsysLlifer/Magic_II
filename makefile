@@ -3,7 +3,7 @@ SRC_DIR = src
 CFLAGS = -Wall -O3 -std=c99 -I$(SRC_DIR) -I/opt/homebrew/include
 LDFLAGS = -L/opt/homebrew/lib -lraylib -framework IOKit -framework Cocoa -framework OpenGL
 
-OUT = magic_world
+OUT = metsys_engine
 SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/ui.c $(SRC_DIR)/util.c
 OBJS = main.o ui.o util.o
 
