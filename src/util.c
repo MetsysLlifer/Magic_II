@@ -4,18 +4,15 @@ Cell grid[2][WIDTH * HEIGHT];
 Cell prev_grid[2][WIDTH * HEIGHT];
 Projectile projectiles[100];
 
-// --- THE EMERGENT COMPILER ---
 void CompileSigilGraph(Player *p, SpellDNA *draft) {
     draft->temp = 20.0f; draft->density = 0.0f; draft->moisture = 0.0f; 
     draft->cohesion = 0.0f; draft->charge = 0.0f; draft->velocity = (Vector2){0,0};
     
-    // Explicit Form assignment
     draft->form = p->selectedForm; 
     draft->movement = MOVE_STRAIGHT; 
     draft->isPermanent = false;
     
     if (p->sigil.nodes[0].active) {
-        // Core node dictates the primary movement pattern
         draft->movement = p->sigil.nodes[0].movement;
     }
 
@@ -55,9 +52,7 @@ void CompileSigilGraph(Player *p, SpellDNA *draft) {
         }
     }
 
-    // Emergent Beam Override
     if (draft->temp > 150.0f && draft->charge > 100.0f) draft->form = FORM_BEAM; 
-    
     if (draft->cohesion > 150.0f && draft->density > 100.0f) draft->isPermanent = true;
 }
 
@@ -176,7 +171,6 @@ void UpdateSimulation(float dt, Player *p) {
         if (grid[LAYER_AIR][i].density < 10.0f && grid[LAYER_AIR][i].cohesion < 10.0f) grid[LAYER_AIR][i].density *= 0.95f; 
     }
 
-    // PROJECTILE KINETIC PHYSICS (Sin/Cos/Orbit)
     for(int i=0; i<100; i++) {
         if(!projectiles[i].active) continue;
         

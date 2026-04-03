@@ -155,8 +155,8 @@ void DrawPlayerEntity(Player *p) {
         DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
         DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
 
-        SpellDNA activeDNA = p->hotbar[p->activeSlot];
-        if (activeDNA.charge > 10.0f) {
+        HotbarSlot activeSlot = p->hotbar[p->activeSlot];
+        if (activeSlot.type == ITEM_SPELL && activeSlot.spell.charge > 10.0f) {
             float t = GetTime() * 40.0f;
             float sparkRadius = radius + 3.0f;
             for(int i = 0; i < 3; i++) {
@@ -169,7 +169,7 @@ void DrawPlayerEntity(Player *p) {
     }
 }
 
-void DrawInterface(Player *p, SpellDNA *draft) {
+void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
     DrawRectangle(10, 10, 200, 15, DARKGRAY);
     DrawRectangle(10, 10, (int)((fmax(0, p->health) / p->maxHealth) * 200), 15, RED);
     DrawRectangleLines(10, 10, 200, 15, WHITE);
@@ -179,164 +179,214 @@ void DrawInterface(Player *p, SpellDNA *draft) {
     DrawRectangleLines(10, 35, 180, 120, GOLD);
     DrawText(TextFormat("ACTIVE SLOT: %d", p->activeSlot + 1), 15, 40, 10, GOLD);
     
-    SpellDNA activeDNA = p->hotbar[p->activeSlot];
-    const char* formName = (activeDNA.form == FORM_PROJECTILE) ? "PROJECTILE" : 
-                           (activeDNA.form == FORM_MANIFEST) ? "MANIFEST" : 
-                           (activeDNA.form == FORM_AURA) ? "AURA" : "BEAM";
-                           
-    DrawText(TextFormat("Form: %s", formName), 15, 55, 10, SKYBLUE);
-    DrawText(TextFormat("Temp: %.0f | Mass: %.0f", activeDNA.temp, activeDNA.density), 15, 70, 10, RAYWHITE);
-    DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", activeDNA.cohesion, activeDNA.moisture), 15, 85, 10, RAYWHITE);
-    DrawText(TextFormat("Chrg: %.0f", activeDNA.charge), 15, 100, 10, RAYWHITE);
-
-    DrawProceduralSigil((Vector2){100, 130}, p->sigil.nodes[0], 15.0f);
+    HotbarSlot activeSlot = p->hotbar[p->activeSlot];
+    
+    if (activeSlot.type == ITEM_SPELL) {
+        DrawText("TYPE: ENERGY SCALAR", 15, 55, 10, SKYBLUE);
+        DrawText(TextFormat("Temp: %.0f | Mass: %.0f", activeSlot.spell.temp, activeSlot.spell.density), 15, 70, 10, RAYWHITE);
+        DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", activeSlot.spell.cohesion, activeSlot.spell.moisture), 15, 85, 10, RAYWHITE);
+        DrawText(TextFormat("Chrg: %.0f", activeSlot.spell.charge), 15, 100, 10, RAYWHITE);
+        DrawProceduralSigil((Vector2){100, 130}, p->sigil.nodes[0], 15.0f);
+    } else {
+        DrawText("TYPE: BIO-MATRIX (ASI)", 15, 55, 10, GREEN);
+        DrawText(TextFormat("Mass: %.0f | Int: %.0f", activeSlot.npc.mass, activeSlot.npc.intelligence), 15, 70, 10, RAYWHITE);
+        DrawText(TextFormat("Aero: %.0f | Hyd: %.0f", activeSlot.npc.aero, activeSlot.npc.hydro), 15, 85, 10, RAYWHITE);
+        DrawText(TextFormat("Terr: %.0f | Hst: %.0f", activeSlot.npc.terrestrial, activeSlot.npc.hostility), 15, 100, 10, RAYWHITE);
+        DrawProceduralNPC((Vector2){100, 135}, 0, activeSlot.npc, 1.0f); 
+    }
 
     DrawText(TextFormat("VISION BLEND: %d%%", (int)(p->visionBlend * 100)), 10, 165, 10, PURPLE);
     Color targetColor = (p->castLayer == LAYER_AIR) ? SKYBLUE : BROWN;
     DrawText((p->castLayer == LAYER_AIR) ? "Z-TARGET: AIR [SHIFT]" : "Z-TARGET: GROUND [SHIFT]", 10, 180, 12, targetColor);
     DrawText("`=Craft | ESC=Guide | [ / ]=Blend", 10, 195, 10, GRAY);
 
-    // --- INFINITE NODE COMPILER UI ---
+    int startX = (800 - (10 * 35)) / 2; 
+    for(int i = 0; i < 10; i++) {
+        Rectangle slotRec = { startX + (i * 35), 400, 30, 30 };
+        DrawRectangleRec(slotRec, Fade(BLACK, 0.8f));
+        Color bColor = (i == p->activeSlot) ? GOLD : DARKGRAY;
+        DrawRectangleLinesEx(slotRec, (i == p->activeSlot) ? 2 : 1, bColor);
+        DrawText(TextFormat("%d", i+1), slotRec.x + 3, slotRec.y + 2, 10, GRAY);
+        
+        if (p->hotbar[i].type == ITEM_SPELL && p->hotbar[i].spell.temp != 0) {
+            DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, PURPLE);
+        } else if (p->hotbar[i].type == ITEM_NPC && p->hotbar[i].npc.mass != 0) {
+            DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, GREEN);
+        }
+    }
+
     if (p->isCrafting && !p->showGuide) {
-        Rectangle canvasBounds = {250, 50, 500, 360};
+        DrawRectangle(50, 30, 700, 380, Fade(BLACK, 0.95f));
+        DrawRectangleLines(50, 30, 700, 380, GOLD);
         
-        DrawRectangle(50, 50, 700, 360, Fade(BLACK, 0.95f));
-        DrawRectangleLines(50, 50, 700, 360, GOLD);
-        DrawLine(250, 50, 250, 410, DARKGRAY);
+        DrawText("TAB: SWITCH ARCHITECTURE", 60, 40, 10, GRAY);
+        Color spellTab = (p->craftCategory == 0) ? GOLD : DARKGRAY;
+        Color npcTab = (p->craftCategory == 1) ? GREEN : DARKGRAY;
+        DrawText("SPELL MATRIX", 300, 40, 15, spellTab);
+        DrawText("BIO MATRIX", 450, 40, 15, npcTab);
 
-        // LEFT PANE: Node Parameters AND Node Movement Settings
-        DrawText("NODE PARAMETERS", 70, 70, 15, GOLD);
-        if (p->selectedNodeId != -1 && p->sigil.nodes[p->selectedNodeId].active) {
-            SpellNode *n = &p->sigil.nodes[p->selectedNodeId];
-            DrawText(TextFormat("Editing Node ID: %d", p->selectedNodeId), 70, 90, 10, SKYBLUE);
-            GuiSlider((Rectangle){90, 110, 130, 15}, "TEMP", NULL, &n->temp, -100, 200);
-            GuiSlider((Rectangle){90, 135, 130, 15}, "MASS", NULL, &n->density, 0, 100);
-            GuiSlider((Rectangle){90, 160, 130, 15}, "COHE", NULL, &n->cohesion, 0, 100);
-            GuiSlider((Rectangle){90, 185, 130, 15}, "WET ", NULL, &n->moisture, 0, 100);
-            GuiSlider((Rectangle){90, 210, 130, 15}, "CHRG", NULL, &n->charge, 0, 100);
+        if (p->craftCategory == 0) {
+            Rectangle canvasBounds = {250, 60, 490, 340};
+            DrawLine(240, 60, 240, 400, DARKGRAY);
 
-            // EXPLICIT NODE MOVEMENT CONTROLS
-            DrawText("NODE MOVEMENT:", 70, 240, 10, WHITE);
-            if(GuiButton((Rectangle){70, 255, 35, 20}, "STR")) n->movement = MOVE_STRAIGHT;
-            if(GuiButton((Rectangle){110, 255, 35, 20}, "SIN")) n->movement = MOVE_SIN;
-            if(GuiButton((Rectangle){150, 255, 35, 20}, "COS")) n->movement = MOVE_COS;
-            if(GuiButton((Rectangle){190, 255, 35, 20}, "ORB")) n->movement = MOVE_ORBIT;
-            
-            // Highlight active movement
-            int mx = (n->movement == 0) ? 70 : (n->movement == 1) ? 110 : (n->movement == 2) ? 150 : 190;
-            DrawRectangleLines(mx, 255, 35, 20, GREEN);
-
-        } else {
-            DrawText("No Node Selected.", 70, 120, 10, GRAY);
-        }
-
-        // EXPLICIT GLOBAL FORM CONTROLS
-        DrawText("GLOBAL FORM:", 70, 290, 10, WHITE);
-        if(GuiButton((Rectangle){70, 305, 50, 25}, "PROJ")) p->selectedForm = FORM_PROJECTILE;
-        if(GuiButton((Rectangle){125, 305, 50, 25}, "MANI")) p->selectedForm = FORM_MANIFEST;
-        if(GuiButton((Rectangle){180, 305, 50, 25}, "AURA")) p->selectedForm = FORM_AURA;
-        
-        int fx = (p->selectedForm == 0) ? 70 : (p->selectedForm == 1) ? 125 : 180;
-        DrawRectangleLines(fx, 305, 50, 25, PURPLE);
-
-        GuiCheckBox((Rectangle){70, 345, 15, 15}, "ETERNAL", &draft->isPermanent);
-
-        if (GuiButton((Rectangle){70, 370, 160, 30}, "IMPRINT TO SLOT")) {
-            CompileSigilGraph(p, draft); 
-            p->hotbar[p->activeSlot] = *draft;
-            p->isCrafting = false;
-        }
-
-        // RIGHT PANE: Canvas
-        DrawText("INFINITE COMPILER CANVAS", 270, 60, 20, GOLD);
-        DrawText("L-Click: Add/Select | R-Click: Delete | Scroll: Zoom | Mid-Click: Pan", 270, 85, 10, GRAY);
-
-        Vector2 mousePos = GetMousePosition();
-        if (CheckCollisionPointRec(mousePos, canvasBounds)) {
-            p->craftCamera.zoom += GetMouseWheelMove() * 0.1f;
-            if (p->craftCamera.zoom < 0.2f) p->craftCamera.zoom = 0.2f;
-            if (p->craftCamera.zoom > 3.0f) p->craftCamera.zoom = 3.0f;
-            
-            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-                Vector2 delta = GetMouseDelta();
-                p->craftCamera.target.x -= delta.x / p->craftCamera.zoom;
-                p->craftCamera.target.y -= delta.y / p->craftCamera.zoom;
-            }
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
-                int clickedId = -1;
-                
-                for(int i=0; i<MAX_NODES; i++) {
-                    if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
-                        clickedId = i; break;
-                    }
-                }
-
-                if (clickedId != -1) {
-                    p->selectedNodeId = clickedId; 
-                } else if (p->selectedNodeId != -1) {
-                    for(int i=0; i<MAX_NODES; i++) {
-                        if (!p->sigil.nodes[i].active) {
-                            p->sigil.nodes[i].active = true;
-                            p->sigil.nodes[i].parentId = p->selectedNodeId;
-                            p->sigil.nodes[i].pos = worldMouse;
-                            p->sigil.nodes[i].temp = 0; p->sigil.nodes[i].density = 0;
-                            p->sigil.nodes[i].cohesion = 0; p->sigil.nodes[i].moisture = 0; p->sigil.nodes[i].charge = 0;
-                            p->sigil.nodes[i].movement = MOVE_STRAIGHT; // Default
-                            p->selectedNodeId = i; 
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
-                for(int i=1; i<MAX_NODES; i++) { 
-                    if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
-                        p->sigil.nodes[i].active = false;
-                        if (p->selectedNodeId == i) p->selectedNodeId = 0;
-                        for(int j=1; j<MAX_NODES; j++) {
-                            if (p->sigil.nodes[j].parentId == i) p->sigil.nodes[j].active = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        BeginScissorMode(canvasBounds.x, canvasBounds.y, canvasBounds.width, canvasBounds.height);
-        BeginMode2D(p->craftCamera);
-            
-            for(int i=-1000; i<1000; i+=50) {
-                DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f));
-                DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
-            }
-
-            for(int i=0; i<MAX_NODES; i++) {
-                if (!p->sigil.nodes[i].active || p->sigil.nodes[i].parentId == -1) continue;
-                Vector2 parentPos = p->sigil.nodes[p->sigil.nodes[i].parentId].pos;
-                DrawLineEx(parentPos, p->sigil.nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
-                Vector2 mid = { (parentPos.x + p->sigil.nodes[i].pos.x)/2, (parentPos.y + p->sigil.nodes[i].pos.y)/2 };
-                DrawCircleV(mid, 3.0f, RAYWHITE);
-            }
-
-            for(int i=0; i<MAX_NODES; i++) {
-                if (!p->sigil.nodes[i].active) continue;
-                Color ringColor = (i == p->selectedNodeId) ? GOLD : RAYWHITE;
-                if (i == 0) DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 25.0f, PURPLE); 
-                DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 18.0f, ringColor);
-                DrawProceduralSigil(p->sigil.nodes[i].pos, p->sigil.nodes[i], 8.0f);
-            }
-            
+            DrawText("NODE PARAMETERS", 60, 70, 15, GOLD);
             if (p->selectedNodeId != -1 && p->sigil.nodes[p->selectedNodeId].active) {
-                DrawCircleLines(p->sigil.nodes[p->selectedNodeId].pos.x, p->sigil.nodes[p->selectedNodeId].pos.y, 40.0f, Fade(SKYBLUE, 0.2f));
+                SpellNode *n = &p->sigil.nodes[p->selectedNodeId];
+                DrawText(TextFormat("Editing Node ID: %d", p->selectedNodeId), 60, 90, 10, SKYBLUE);
+                GuiSlider((Rectangle){90, 110, 120, 15}, "TEMP", NULL, &n->temp, -100, 200);
+                GuiSlider((Rectangle){90, 135, 120, 15}, "MASS", NULL, &n->density, 0, 100);
+                GuiSlider((Rectangle){90, 160, 120, 15}, "COHE", NULL, &n->cohesion, 0, 100);
+                GuiSlider((Rectangle){90, 185, 120, 15}, "WET ", NULL, &n->moisture, 0, 100);
+                GuiSlider((Rectangle){90, 210, 120, 15}, "CHRG", NULL, &n->charge, 0, 100);
+
+                DrawText("NODE MOVEMENT:", 60, 240, 10, WHITE);
+                if(GuiButton((Rectangle){60, 255, 35, 20}, "STR")) n->movement = MOVE_STRAIGHT;
+                if(GuiButton((Rectangle){100, 255, 35, 20}, "SIN")) n->movement = MOVE_SIN;
+                if(GuiButton((Rectangle){140, 255, 35, 20}, "COS")) n->movement = MOVE_COS;
+                if(GuiButton((Rectangle){180, 255, 35, 20}, "ORB")) n->movement = MOVE_ORBIT;
+                
+                int mx = (n->movement == 0) ? 60 : (n->movement == 1) ? 100 : (n->movement == 2) ? 140 : 180;
+                DrawRectangleLines(mx, 255, 35, 20, GREEN);
+            } else {
+                DrawText("No Node Selected.", 60, 120, 10, GRAY);
             }
 
-        EndMode2D();
-        EndScissorMode();
+            DrawText("GLOBAL FORM:", 60, 290, 10, WHITE);
+            if(GuiButton((Rectangle){60, 305, 50, 25}, "PROJ")) p->selectedForm = FORM_PROJECTILE;
+            if(GuiButton((Rectangle){115, 305, 50, 25}, "MANI")) p->selectedForm = FORM_MANIFEST;
+            if(GuiButton((Rectangle){170, 305, 50, 25}, "AURA")) p->selectedForm = FORM_AURA;
+            
+            int fx = (p->selectedForm == 0) ? 60 : (p->selectedForm == 1) ? 115 : 180;
+            DrawRectangleLines(fx, 305, 50, 25, PURPLE);
 
-        CompileSigilGraph(p, draft);
+            GuiCheckBox((Rectangle){60, 345, 15, 15}, "ETERNAL", &draftSpell->isPermanent);
+
+            if (GuiButton((Rectangle){60, 370, 160, 30}, "IMPRINT SPELL")) {
+                CompileSigilGraph(p, draftSpell); 
+                p->hotbar[p->activeSlot].type = ITEM_SPELL;
+                p->hotbar[p->activeSlot].spell = *draftSpell;
+                p->isCrafting = false;
+            }
+
+            DrawText("INFINITE COMPILER CANVAS", 250, 65, 15, GOLD);
+            DrawText("L-Click: Add/Select | R-Click: Delete | Scroll: Zoom | Mid-Click: Pan", 250, 85, 10, GRAY);
+
+            Vector2 mousePos = GetMousePosition();
+            if (CheckCollisionPointRec(mousePos, canvasBounds)) {
+                p->craftCamera.zoom += GetMouseWheelMove() * 0.1f;
+                if (p->craftCamera.zoom < 0.2f) p->craftCamera.zoom = 0.2f;
+                if (p->craftCamera.zoom > 3.0f) p->craftCamera.zoom = 3.0f;
+                
+                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                    Vector2 delta = GetMouseDelta();
+                    p->craftCamera.target.x -= delta.x / p->craftCamera.zoom;
+                    p->craftCamera.target.y -= delta.y / p->craftCamera.zoom;
+                }
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
+                    int clickedId = -1;
+                    
+                    for(int i=0; i<MAX_NODES; i++) {
+                        if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
+                            clickedId = i; break;
+                        }
+                    }
+
+                    if (clickedId != -1) {
+                        p->selectedNodeId = clickedId; 
+                    } else if (p->selectedNodeId != -1) {
+                        for(int i=0; i<MAX_NODES; i++) {
+                            if (!p->sigil.nodes[i].active) {
+                                p->sigil.nodes[i].active = true;
+                                p->sigil.nodes[i].parentId = p->selectedNodeId;
+                                p->sigil.nodes[i].pos = worldMouse;
+                                p->sigil.nodes[i].temp = 0; p->sigil.nodes[i].density = 0;
+                                p->sigil.nodes[i].cohesion = 0; p->sigil.nodes[i].moisture = 0; p->sigil.nodes[i].charge = 0;
+                                p->sigil.nodes[i].movement = MOVE_STRAIGHT; 
+                                p->selectedNodeId = i; 
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                    Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
+                    for(int i=1; i<MAX_NODES; i++) { 
+                        if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
+                            p->sigil.nodes[i].active = false;
+                            if (p->selectedNodeId == i) p->selectedNodeId = 0;
+                            for(int j=1; j<MAX_NODES; j++) {
+                                if (p->sigil.nodes[j].parentId == i) p->sigil.nodes[j].active = false;
+                            }
+                        }
+                    }
+                }
+            }
+
+            BeginScissorMode(canvasBounds.x, canvasBounds.y, canvasBounds.width, canvasBounds.height);
+            BeginMode2D(p->craftCamera);
+                
+                for(int i=-1000; i<1000; i+=50) {
+                    DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f));
+                    DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
+                }
+
+                for(int i=0; i<MAX_NODES; i++) {
+                    if (!p->sigil.nodes[i].active || p->sigil.nodes[i].parentId == -1) continue;
+                    Vector2 parentPos = p->sigil.nodes[p->sigil.nodes[i].parentId].pos;
+                    DrawLineEx(parentPos, p->sigil.nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
+                    Vector2 mid = { (parentPos.x + p->sigil.nodes[i].pos.x)/2, (parentPos.y + p->sigil.nodes[i].pos.y)/2 };
+                    DrawCircleV(mid, 3.0f, RAYWHITE);
+                }
+
+                for(int i=0; i<MAX_NODES; i++) {
+                    if (!p->sigil.nodes[i].active) continue;
+                    Color ringColor = (i == p->selectedNodeId) ? GOLD : RAYWHITE;
+                    if (i == 0) DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 25.0f, PURPLE); 
+                    DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 18.0f, ringColor);
+                    DrawProceduralSigil(p->sigil.nodes[i].pos, p->sigil.nodes[i], 8.0f);
+                }
+                
+                if (p->selectedNodeId != -1 && p->sigil.nodes[p->selectedNodeId].active) {
+                    DrawCircleLines(p->sigil.nodes[p->selectedNodeId].pos.x, p->sigil.nodes[p->selectedNodeId].pos.y, 40.0f, Fade(SKYBLUE, 0.2f));
+                }
+
+            EndMode2D();
+            EndScissorMode();
+            CompileSigilGraph(p, draftSpell);
+
+        } else if (p->craftCategory == 1) {
+            DrawText("ARTIFICIAL SUPER INTEL (ASI) COMPILER", 70, 70, 15, GREEN);
+            DrawText("Modify biological and neural scalars.", 70, 90, 10, GRAY);
+            
+            GuiSlider((Rectangle){100, 120, 150, 20}, "MASS (HP)", NULL, &draftNPC->mass, 10, 200);
+            GuiSlider((Rectangle){100, 150, 150, 20}, "AERO (Fly)", NULL, &draftNPC->aero, 0, 100);
+            GuiSlider((Rectangle){100, 180, 150, 20}, "HYDR (Swim)", NULL, &draftNPC->hydro, 0, 100);
+            GuiSlider((Rectangle){100, 210, 150, 20}, "TERR (Walk)", NULL, &draftNPC->terrestrial, 0, 100);
+            GuiSlider((Rectangle){100, 250, 150, 20}, "INTEL (AI)", NULL, &draftNPC->intelligence, 0, 100);
+            GuiSlider((Rectangle){100, 280, 150, 20}, "HOSTILE", NULL, &draftNPC->hostility, 0, 100);
+
+            if (GuiButton((Rectangle){350, 120, 120, 30}, "RANDOM MUTATION")) {
+                draftNPC->mass = GetRandomValue(10, 150);
+                draftNPC->aero = GetRandomValue(0, 100);
+                draftNPC->hydro = GetRandomValue(0, 100);
+                draftNPC->terrestrial = GetRandomValue(0, 100);
+                draftNPC->intelligence = GetRandomValue(0, 100);
+                draftNPC->hostility = GetRandomValue(0, 100);
+            }
+
+            DrawRectangle(400, 180, 200, 150, Fade(DARKGRAY, 0.5f));
+            DrawText("BLUEPRINT PREVIEW", 430, 190, 10, WHITE);
+            DrawProceduralNPC((Vector2){500, 260}, 0, *draftNPC, 1.0f);
+
+            if (GuiButton((Rectangle){70, 350, 150, 40}, "IMPRINT BLUEPRINT")) {
+                p->hotbar[p->activeSlot].type = ITEM_NPC;
+                p->hotbar[p->activeSlot].npc = *draftNPC;
+                p->isCrafting = false;
+            }
+        }
     }
 }
 
@@ -347,10 +397,10 @@ void DrawGuideMenu(Player *p) {
     DrawText("METSYS: ARCHITECTURE OF MAGIC", 120, 70, 20, GOLD);
     DrawText("--------------------------------------------------", 120, 90, 20, GRAY);
     
-    DrawText("EXPLICIT FORMS & KINETICS:", 120, 120, 15, SKYBLUE);
-    DrawText("- MOVEMENT: Core node sets the projectile's trajectory (Straight, Sin, Cos, Orbit).", 130, 145, 10, WHITE);
-    DrawText("- FORM: Select exactly how the spell enters the world via Global modifiers.", 130, 160, 10, WHITE);
-    DrawText("- BEAM OVERRIDE: Extreme Heat + Charge will organically override and cast as a Beam.", 130, 175, 10, WHITE);
+    DrawText("EMERGENT CASTING FORMS:", 120, 120, 15, SKYBLUE);
+    DrawText("- WAVE: Adding High Moisture creates sinusoidal paths.", 130, 145, 10, WHITE);
+    DrawText("- ORBIT: Creating dense, highly charged clusters orbits the player.", 130, 160, 10, WHITE);
+    DrawText("- BEAM: Overwhelming Heat + Charge creates an instant line.", 130, 175, 10, WHITE);
 
     DrawText("CONTROLS:", 120, 210, 15, SKYBLUE);
     DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [Mouse 1]: Hold to Cast", 130, 235, 10, WHITE);
