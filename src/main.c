@@ -1,66 +1,39 @@
 #include "util.h"
 
 int main() {
-    // Standard USC-preferred resolution for USC CS projects
-    InitWindow(800, 450, "Metsys: Emergent Field Simulation");
+    InitWindow(800, 450, "Metsys: Emergent World");
     SetTargetFPS(60);
     InitSimulation();
 
-    // Ensure the player struct is initialized properly
-    Player player = { 0 };
-    player.pos = (Vector2){ 400, 225 };
-    player.speed = 250.0f;
-    player.activeElement = 0;
+    Player player = { .pos = {400, 225}, .speed = 200.0f, .activeSlot = 0, .isCrafting = false };
+    SpellDNA draft = { 0 };
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
+        if (IsKeyPressed(KEY_GRAVE)) player.isCrafting = !player.isCrafting;
 
-        // 1. INPUT HANDLING
-        if (IsKeyPressed(KEY_ONE)) player.activeElement = 0;
-        if (IsKeyPressed(KEY_TWO)) player.activeElement = 1;
-        if (IsKeyPressed(KEY_THREE)) player.activeElement = 2;
-        if (IsKeyPressed(KEY_FOUR)) player.activeElement = 3;
+        if (!player.isCrafting) {
+            if (IsKeyDown(KEY_W)) player.pos.y -= player.speed * dt;
+            if (IsKeyDown(KEY_S)) player.pos.y += player.speed * dt;
+            if (IsKeyDown(KEY_A)) player.pos.x -= player.speed * dt;
+            if (IsKeyDown(KEY_D)) player.pos.x += player.speed * dt;
+            for (int i = 0; i < 9; i++) if (IsKeyPressed(KEY_ONE + i)) player.activeSlot = i;
 
-        // Corrected Movement Logic
-        if (IsKeyDown(KEY_W)) player.pos.y -= player.speed * dt;
-        if (IsKeyDown(KEY_S)) player.pos.y += player.speed * dt;
-        if (IsKeyDown(KEY_A)) player.pos.x -= player.speed * dt;
-        if (IsKeyDown(KEY_D)) player.pos.x += player.speed * dt;
-
-        if (IsMouseButtonDown(0)) {
-            Vector2 m = GetMousePosition();
-            int gx = (int)(m.x / PIXEL_SIZE);
-            int gy = (int)(m.y / PIXEL_SIZE);
-            Cell energy = {0};
-            
-            if (player.activeElement == 0) energy.temp = 45.0f;
-            if (player.activeElement == 1) energy.moisture = 30.0f;
-            if (player.activeElement == 2) energy.density = 20.0f;
-            if (player.activeElement == 3) energy.velocity = (Vector2){0, -10.0f};
-
-            InjectEnergy(gx, gy, energy);
+            if (IsMouseButtonDown(0)) {
+                Vector2 m = GetMousePosition();
+                InjectEnergy(m.x / PIXEL_SIZE, m.y / PIXEL_SIZE, player.hotbar[player.activeSlot]);
+            }
         }
 
-        // 2. PHYSICS UPDATE
         UpdateSimulation(dt);
 
-        // 3. RENDERING
         BeginDrawing();
-            ClearBackground((Color){10, 10, 15, 255});
-            
+            ClearBackground((Color){5, 5, 10, 255});
             DrawSimulation();
-            
-            // Draw Player
-            DrawCircleV(player.pos, 6, RAYWHITE);
-            DrawCircleLines(player.pos.x, player.pos.y, 6, GOLD);
-            
-            // Draw UI (Passing address of player)
-            DrawInterface(&player);
-            
-            DrawFPS(720, 10);
+            DrawCircleV(player.pos, 5, WHITE);
+            DrawInterface(&player, &draft);
         EndDrawing();
     }
-
     CloseWindow();
     return 0;
 }
