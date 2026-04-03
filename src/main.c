@@ -1,7 +1,7 @@
 #include "util.h"
 
 int main() {
-    InitWindow(800, 450, "Metsys: Dual Realm Simulation");
+    InitWindow(800, 450, "Metsys: Seamless Realms");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL); 
     InitSimulation();
@@ -15,6 +15,7 @@ int main() {
     player.castLayer = LAYER_GROUND; 
     player.chargeLevel = 0.0f;
     player.isCharging = false;
+    player.visionBlend = 0.0f; // Start fully in the Material Realm
     
     SpellDNA draft = { 0 };
     draft.temp = 20.0f; 
@@ -23,14 +24,22 @@ int main() {
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
 
+        // UI & State Toggles
         if (IsKeyPressed(KEY_ESCAPE)) player.showGuide = !player.showGuide;
         if (IsKeyPressed(KEY_GRAVE) && !player.showGuide) player.isCrafting = !player.isCrafting;
-        if (IsKeyPressed(KEY_TAB)) player.energyVision = !player.energyVision;
         if (IsKeyPressed(KEY_SPACE)) player.castLayer = !player.castLayer; 
+
+        // VISION BLENDING CONTROLS
+        if (IsKeyPressed(KEY_TAB)) {
+            // Quick snap between realms
+            player.visionBlend = (player.visionBlend > 0.5f) ? 0.0f : 1.0f;
+        }
+        // Smooth scrubbing using brackets
+        if (IsKeyDown(KEY_RIGHT_BRACKET)) player.visionBlend = fminf(1.0f, player.visionBlend + dt * 1.5f);
+        if (IsKeyDown(KEY_LEFT_BRACKET)) player.visionBlend = fmaxf(0.0f, player.visionBlend - dt * 1.5f);
 
         if (!player.isCrafting && !player.showGuide && player.health > 0) {
             
-            // Movement via Collision Helper
             Vector2 delta = {0, 0};
             if (IsKeyDown(KEY_W)) delta.y -= player.speed * dt;
             if (IsKeyDown(KEY_S)) delta.y += player.speed * dt;
@@ -40,17 +49,14 @@ int main() {
             
             for (int i = 0; i < 9; i++) if (IsKeyPressed(KEY_ONE + i)) player.activeSlot = i;
 
-            // HOLD TO CAST MECHANIC
             if (IsMouseButtonDown(0)) {
                 player.isCharging = true;
-                player.chargeLevel += dt * 2.0f; // Charge speed
-                if (player.chargeLevel > 3.0f) player.chargeLevel = 3.0f; // Max multiplier x4
+                player.chargeLevel += dt * 2.0f; 
+                if (player.chargeLevel > 3.0f) player.chargeLevel = 3.0f; 
             } else if (IsMouseButtonReleased(0)) {
-                // Execute with multiplier (Base 1.0 + Charge)
                 float multiplier = 1.0f + player.chargeLevel;
                 ExecuteSpell(&player, GetMousePosition(), player.hotbar[player.activeSlot], multiplier);
                 
-                // Reset charge
                 player.isCharging = false;
                 player.chargeLevel = 0.0f;
             }
@@ -61,8 +67,12 @@ int main() {
         BeginDrawing();
             ClearBackground((Color){20, 20, 25, 255}); 
 
-            if (player.energyVision) DrawEnergyRealm();
-            else DrawMaterialRealm();
+            // ALHPA BLENDED RENDERING
+            // Draw Material fading out as visionBlend goes up
+            DrawMaterialRealm(1.0f - (player.visionBlend * 0.8f)); // Never goes fully invisible so you can still navigate
+            
+            // Draw Energy fading in as visionBlend goes up
+            DrawEnergyRealm(player.visionBlend);
             
             DrawProjectiles();
             
@@ -75,7 +85,6 @@ int main() {
             DrawInterface(&player, &draft);
             DrawGuideMenu(&player);
 
-            DrawFPS(720, 10);
         EndDrawing();
     }
     

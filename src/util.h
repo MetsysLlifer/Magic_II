@@ -57,12 +57,13 @@ typedef struct {
     int activeSlot;
     SpellDNA hotbar[10];
     
-    float chargeLevel; // NEW: Tracks how long the spell is held
-    bool isCharging;   // NEW: State flag for holding
+    float chargeLevel; 
+    bool isCharging;   
 
     bool isCrafting;
     bool showGuide;
-    bool energyVision; 
+    
+    float visionBlend; // NEW: 0.0 (Material) to 1.0 (Energy)
     int castLayer; 
 } Player;
 
@@ -72,9 +73,9 @@ extern Projectile projectiles[100];
 
 void InitSimulation();
 void UpdateSimulation(float dt, Player *p); 
-void MovePlayer(Player *p, Vector2 delta); // NEW: Handles Collision
-void DrawMaterialRealm();
-void DrawEnergyRealm();
+void MovePlayer(Player *p, Vector2 delta); 
+void DrawMaterialRealm(float alpha); // NEW: Accepts opacity multiplier
+void DrawEnergyRealm(float alpha);   // NEW: Accepts opacity multiplier
 void DrawProjectiles();
 void DrawInterface(Player *p, SpellDNA *draft);
 void DrawGuideMenu(Player *p);
