@@ -9,7 +9,6 @@ void InitSimulation() {
     memset(prev_grid, 0, sizeof(prev_grid));
     for(int i=0; i<100; i++) projectiles[i].active = false;
 
-    // Generate Natural Walls (High density, high cohesion)
     for (int i = 0; i < 30; i++) {
         int rx = GetRandomValue(10, WIDTH - 10);
         int ry = GetRandomValue(10, HEIGHT - 10);
@@ -18,10 +17,9 @@ void InitSimulation() {
             for (int dx = -size; dx <= size; dx++) {
                 int idx = (ry + dy) * WIDTH + (rx + dx);
                 if (idx >= 0 && idx < WIDTH * HEIGHT) {
-                    // Create irregular cave-like shapes
                     if (dx*dx + dy*dy <= size*size) {
-                        grid[LAYER_GROUND][idx].density = 100.0f; // Very dense wall
-                        grid[LAYER_GROUND][idx].cohesion = 100.0f; // Solid
+                        grid[LAYER_GROUND][idx].density = 100.0f; 
+                        grid[LAYER_GROUND][idx].cohesion = 100.0f; 
                         grid[LAYER_GROUND][idx].temp = 20.0f;     
                         grid[LAYER_GROUND][idx].permanent = true; 
                     }
@@ -31,15 +29,29 @@ void InitSimulation() {
     }
 }
 
-void MovePlayer(Player *p, Vector2 delta) {
+void MovePlayer(Player *p, Vector2 delta, float dt) {
     Vector2 nextPos = { p->pos.x + delta.x, p->pos.y + delta.y };
     int nx = (int)(nextPos.x / PIXEL_SIZE);
     int ny = (int)(nextPos.y / PIXEL_SIZE);
 
-    // COLLISION DETECTION: Check if target cell is solid
+    // Z-AXIS LOGIC: Jump Arc & Gravity
+    if (p->isJumping) {
+        p->z += p->zVelocity * dt;
+        p->zVelocity -= 600.0f * dt; // Gravity pull
+        if (p->z <= 0.0f) {
+            p->z = 0.0f;
+            p->zVelocity = 0.0f;
+            p->isJumping = false;
+            // Small kinetic impact upon landing!
+            InjectEnergyArea(nx, ny, LAYER_GROUND, 1, (SpellDNA){0, 5.0f, 0, 0, 0, FORM_AURA, false});
+        }
+    }
+
+    // COLLISION DETECTION
     if (nx >= 0 && nx < WIDTH && ny >= 0 && ny < HEIGHT) {
-        if (grid[LAYER_GROUND][ny * WIDTH + nx].cohesion < 80.0f) {
-            p->pos = nextPos; // Move only if not a wall
+        // If the player is in the air (z > 15), they can pass over walls!
+        if (p->z > 15.0f || grid[LAYER_GROUND][ny * WIDTH + nx].cohesion < 80.0f) {
+            p->pos = nextPos; 
         }
     }
 }
@@ -68,6 +80,9 @@ void UpdateSimulation(float dt, Player *p) {
     memcpy(prev_grid, grid, sizeof(grid));
     Diffuse(dt);
     
+    // Animation Time increment
+    p->animTime += dt;
+
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
         for (int z = 0; z < 2; z++) {
             if (!grid[z][i].permanent) {
@@ -76,20 +91,17 @@ void UpdateSimulation(float dt, Player *p) {
                 grid[z][i].moisture *= 0.99f;
                 grid[z][i].charge *= 0.95f; 
             }
-            if (grid[z][i].temp > 80.0f && grid[z][i].cohesion > 30.0f) grid[z][i].cohesion -= 0.5f; // Melt
-            if (grid[z][i].temp < 0.0f && grid[z][i].cohesion < 90.0f && grid[z][i].moisture > 10.0f) grid[z][i].cohesion += 1.0f; // Freeze
+            if (grid[z][i].temp > 80.0f && grid[z][i].cohesion > 30.0f) grid[z][i].cohesion -= 0.5f; 
+            if (grid[z][i].temp < 0.0f && grid[z][i].cohesion < 90.0f && grid[z][i].moisture > 10.0f) grid[z][i].cohesion += 1.0f; 
         }
 
-        // AIR TO GROUND INTERACTION (Kinetic Crash)
         if (grid[LAYER_AIR][i].density > 20.0f && grid[LAYER_AIR][i].cohesion > 20.0f) {
-            // Massive objects falling generate heat on impact
             grid[LAYER_GROUND][i].temp += grid[LAYER_AIR][i].density * 0.5f; 
             grid[LAYER_GROUND][i].density += grid[LAYER_AIR][i].density;
             grid[LAYER_GROUND][i].cohesion = fmax(grid[LAYER_GROUND][i].cohesion, grid[LAYER_AIR][i].cohesion);
             grid[LAYER_AIR][i].density *= 0.1f; 
         }
         
-        // GROUND TO AIR (Buoyancy)
         if (grid[LAYER_GROUND][i].temp > 60.0f && grid[LAYER_GROUND][i].density < 15.0f && grid[LAYER_GROUND][i].cohesion < 10.0f) {
             grid[LAYER_AIR][i].temp += grid[LAYER_GROUND][i].temp * 0.1f;
             grid[LAYER_AIR][i].density += grid[LAYER_GROUND][i].density * 0.1f;
@@ -97,7 +109,7 @@ void UpdateSimulation(float dt, Player *p) {
             grid[LAYER_GROUND][i].density *= 0.9f;
         }
         
-        if (grid[LAYER_AIR][i].density < 10.0f && grid[LAYER_AIR][i].cohesion < 10.0f) grid[LAYER_AIR][i].density *= 0.95f; // Dissipate
+        if (grid[LAYER_AIR][i].density < 10.0f && grid[LAYER_AIR][i].cohesion < 10.0f) grid[LAYER_AIR][i].density *= 0.95f; 
     }
 
     for(int i=0; i<100; i++) {
@@ -105,6 +117,7 @@ void UpdateSimulation(float dt, Player *p) {
         projectiles[i].pos.x += projectiles[i].velocity.x * dt;
         projectiles[i].pos.y += projectiles[i].velocity.y * dt;
         projectiles[i].life -= dt;
+        projectiles[i].animOffset += dt * 10.0f; // Spin animation
 
         int gx = (int)(projectiles[i].pos.x / PIXEL_SIZE);
         int gy = (int)(projectiles[i].pos.y / PIXEL_SIZE);
@@ -113,7 +126,6 @@ void UpdateSimulation(float dt, Player *p) {
                         (grid[projectiles[i].layer][gy * WIDTH + gx].cohesion > 80.0f) : true;
 
         if (projectiles[i].life <= 0 || hitSolid) {
-            // Projectiles burst wider based on their density payload
             int radius = (int)(projectiles[i].payload.density / 20.0f) + 1;
             InjectEnergyArea(gx, gy, projectiles[i].layer, radius, projectiles[i].payload); 
             projectiles[i].active = false;
@@ -123,23 +135,24 @@ void UpdateSimulation(float dt, Player *p) {
     int px = (int)(p->pos.x / PIXEL_SIZE);
     int py = (int)(p->pos.y / PIXEL_SIZE);
     if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
-        Cell g = grid[LAYER_GROUND][py * WIDTH + px];
-        if (g.temp > 60.0f) p->health -= (g.temp - 60.0f) * 0.5f * dt;
-        if (g.temp < -10.0f) p->health -= fabsf(g.temp + 10.0f) * 0.5f * dt;
-        float momentum = g.density * sqrtf(g.velocity.x*g.velocity.x + g.velocity.y*g.velocity.y);
-        if (momentum > 150.0f) p->health -= (momentum - 150.0f) * 0.1f * dt;
-        if (g.charge > 40.0f) p->health -= g.charge * 0.2f * dt;
+        // Player only takes ground damage if they are NOT airborne!
+        if (p->z < 5.0f) {
+            Cell g = grid[LAYER_GROUND][py * WIDTH + px];
+            if (g.temp > 60.0f) p->health -= (g.temp - 60.0f) * 0.5f * dt;
+            if (g.temp < -10.0f) p->health -= fabsf(g.temp + 10.0f) * 0.5f * dt;
+            float momentum = g.density * sqrtf(g.velocity.x*g.velocity.x + g.velocity.y*g.velocity.y);
+            if (momentum > 150.0f) p->health -= (momentum - 150.0f) * 0.1f * dt;
+            if (g.charge > 40.0f) p->health -= g.charge * 0.2f * dt;
+        }
     }
 }
 
-// Applies the Charge Multiplier to the DNA before casting
 void ExecuteSpell(Player *p, Vector2 target, SpellDNA dna, float chargeMultiplier) {
     SpellDNA scaledDna = dna;
     scaledDna.temp *= chargeMultiplier;
     scaledDna.density *= chargeMultiplier;
     scaledDna.moisture *= chargeMultiplier;
     scaledDna.charge *= chargeMultiplier;
-    // Cohesion is structural, it doesn't scale with charge.
 
     int gx = (int)(target.x / PIXEL_SIZE);
     int gy = (int)(target.y / PIXEL_SIZE);
@@ -169,6 +182,7 @@ void CastProjectile(Vector2 start, Vector2 target, int layer, SpellDNA dna) {
             projectiles[i].layer = layer;
             projectiles[i].life = 1.5f; 
             projectiles[i].active = true;
+            projectiles[i].animOffset = 0.0f;
             float angle = atan2f(target.y - start.y, target.x - start.x);
             projectiles[i].velocity = (Vector2){ cosf(angle) * 350.0f, sinf(angle) * 350.0f };
             break;

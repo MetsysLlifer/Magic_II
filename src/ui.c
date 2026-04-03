@@ -2,6 +2,29 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+// NEW: Procedural Electricity Generator
+void DrawChargeSparks(int x, int y, int z, float charge, float alpha) {
+    if (charge < 10.0f || alpha <= 0.0f) return;
+    
+    // Fast flickering time baseline
+    float t = GetTime() * 25.0f; 
+    
+    // Pseudo-random chaotic offsets using Sin/Cos interference patterns
+    float ox1 = sinf(t + x * 1.3f + y * 0.7f) * (PIXEL_SIZE * 0.9f);
+    float oy1 = cosf(t * 1.1f + x * 0.8f + y * 1.5f) * (PIXEL_SIZE * 0.9f);
+    float ox2 = sinf(t * 1.4f - x * 1.1f + y * 0.9f) * (PIXEL_SIZE * 0.9f);
+    float oy2 = cosf(t * 0.9f - x * 1.4f - y * 1.2f) * (PIXEL_SIZE * 0.9f);
+
+    int yOffset = (z == LAYER_AIR) ? FLOAT_OFFSET : 0;
+    Vector2 start = { x * PIXEL_SIZE + (PIXEL_SIZE / 2.0f) + ox1, (y * PIXEL_SIZE) - yOffset + (PIXEL_SIZE / 2.0f) + oy1 };
+    Vector2 end = { x * PIXEL_SIZE + (PIXEL_SIZE / 2.0f) + ox2, (y * PIXEL_SIZE) - yOffset + (PIXEL_SIZE / 2.0f) + oy2 };
+
+    unsigned char opacity = (unsigned char)(fmin(255, charge * 5) * alpha);
+    
+    // Draw the jagged spark
+    DrawLineEx(start, end, 1.0f, (Color){220, 200, 255, opacity}); // Bright violet-white static
+}
+
 Color GetCellColor(Cell c) {
     if (c.density < 2.0f && c.temp < 30.0f && c.charge < 10.0f) return BLANK;
     if (c.density > 40.0f && c.cohesion > 60.0f) return (c.temp < 0.0f) ? SKYBLUE : DARKGRAY;
@@ -17,12 +40,12 @@ Color GetCellColor(Cell c) {
 }
 
 void DrawMaterialRealm(float alpha) {
-    if (alpha <= 0.0f) return; // Optimization: Don't draw if fully transparent
+    if (alpha <= 0.0f) return;
 
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             Cell c = grid[LAYER_GROUND][y * WIDTH + x];
-            Color color = Fade(GetCellColor(c), alpha); // Apply cross-fade
+            Color color = Fade(GetCellColor(c), alpha); 
             
             if (color.a > 0) {
                 if (c.density > 60.0f && c.cohesion > 80.0f) {
@@ -33,6 +56,9 @@ void DrawMaterialRealm(float alpha) {
                     DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, color);
                 }
             }
+            
+            // Render Ground Sparks
+            DrawChargeSparks(x, y, LAYER_GROUND, c.charge, alpha);
         }
     }
 
@@ -44,6 +70,9 @@ void DrawMaterialRealm(float alpha) {
                 Color airColor = Fade(GetCellColor(airCell), alpha);
                 if (airColor.a > 0) DrawRectangle(x * PIXEL_SIZE, (y * PIXEL_SIZE) - FLOAT_OFFSET, PIXEL_SIZE, PIXEL_SIZE, airColor);
             }
+            
+            // Render Air Sparks
+            DrawChargeSparks(x, y, LAYER_AIR, airCell.charge, alpha);
         }
     }
 }
@@ -62,8 +91,10 @@ void DrawEnergyRealm(float alpha) {
                 unsigned char b = (unsigned char)fmin(255, fmax(0, c.density * 10));
                 
                 int yOffset = (z == LAYER_AIR) ? FLOAT_OFFSET : 0;
-                // Base opacity is 150, multiplied by the player's blend slider
                 DrawRectangle(x * PIXEL_SIZE, (y * PIXEL_SIZE) - yOffset, PIXEL_SIZE, PIXEL_SIZE, (Color){r, g, b, (unsigned char)(150 * alpha)});
+                
+                // Static renders brightly in the energy realm too
+                DrawChargeSparks(x, y, z, c.charge, alpha);
             }
         }
     }
@@ -73,8 +104,20 @@ void DrawProjectiles() {
     for(int i=0; i<100; i++) {
         if(projectiles[i].active) {
             int yOffset = (projectiles[i].layer == LAYER_AIR) ? FLOAT_OFFSET : 0;
-            DrawCircle(projectiles[i].pos.x, projectiles[i].pos.y - yOffset, 4, GOLD);
-            DrawCircleLines(projectiles[i].pos.x, projectiles[i].pos.y - yOffset, 6, WHITE);
+            Vector2 pCenter = {projectiles[i].pos.x, projectiles[i].pos.y - yOffset};
+            
+            float pulse = sinf(projectiles[i].animOffset) * 2.0f;
+            DrawCircle(pCenter.x, pCenter.y, 4 + pulse, GOLD);
+            DrawCircleLines(pCenter.x, pCenter.y, 6 + pulse, RAYWHITE);
+            
+            // Add sparking trails to charged projectiles
+            if (projectiles[i].payload.charge > 10.0f) {
+                float t = GetTime() * 30.0f;
+                float ox = sinf(t + i) * 8.0f;
+                float oy = cosf(t * 1.5f + i) * 8.0f;
+                DrawLineEx(pCenter, (Vector2){pCenter.x + ox, pCenter.y + oy}, 2.0f, (Color){200, 150, 255, 200});
+            }
+            
             if (projectiles[i].layer == LAYER_AIR) DrawEllipse(projectiles[i].pos.x, projectiles[i].pos.y, 4, 2, Fade(BLACK, 0.5f));
         }
     }
@@ -99,18 +142,32 @@ void DrawInterface(Player *p, SpellDNA *draft) {
     DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", activeDNA.cohesion, activeDNA.moisture), 15, 85, 10, RAYWHITE);
     DrawText(TextFormat("Chrg: %.0f", activeDNA.charge), 15, 100, 10, RAYWHITE);
 
-    // Dynamic Vision HUD
     DrawText(TextFormat("VISION BLEND: %d%%", (int)(p->visionBlend * 100)), 10, 145, 10, PURPLE);
     
     Color targetColor = (p->castLayer == LAYER_AIR) ? SKYBLUE : BROWN;
-    DrawText((p->castLayer == LAYER_AIR) ? "Z-TARGET: AIR [SPACE]" : "Z-TARGET: GROUND [SPACE]", 10, 160, 12, targetColor);
+    DrawText((p->castLayer == LAYER_AIR) ? "Z-TARGET: AIR [SHIFT]" : "Z-TARGET: GROUND [SHIFT]", 10, 160, 12, targetColor);
     DrawText("`=Craft | ESC=Guide | [ / ]=Blend", 10, 175, 10, GRAY);
 
     if (p->isCharging) {
         float maxCharge = 3.0f;
         float radius = 10.0f + (p->chargeLevel / maxCharge) * 30.0f;
-        DrawCircleLines(p->pos.x, p->pos.y, radius, SKYBLUE);
-        DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), p->pos.x + radius + 5, p->pos.y, 10, GOLD);
+        float pulse = (sinf(p->animTime * 10.0f) + 1.0f) * 0.5f; 
+        
+        Vector2 cCenter = {p->pos.x, p->pos.y - p->z};
+        DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
+        DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
+
+        // Player emits static electricity based on the spell's charge!
+        if (activeDNA.charge > 10.0f) {
+            float t = GetTime() * 40.0f;
+            float sparkRadius = radius + 5.0f;
+            for(int i = 0; i < 3; i++) {
+                float angle = (t + i * 2.0f);
+                float ox = sinf(angle * 1.3f) * sparkRadius;
+                float oy = cosf(angle * 0.7f) * sparkRadius;
+                DrawLineEx(cCenter, (Vector2){cCenter.x + ox, cCenter.y + oy}, 2.0f, (Color){200, 150, 255, 255});
+            }
+        }
     }
 
     if (p->isCrafting && !p->showGuide) {
@@ -149,12 +206,12 @@ void DrawGuideMenu(Player *p) {
     
     DrawText("MECHANICS:", 120, 120, 15, SKYBLUE);
     DrawText("- CHARGING: Hold [Mouse 1] to multiply energy output.", 130, 145, 10, WHITE);
-    DrawText("- HEIGHT: Dense solids block movement and render with depth.", 130, 160, 10, WHITE);
-    DrawText("- KINETIC CRASH: Dropping solids creates heat on impact.", 130, 175, 10, WHITE);
+    DrawText("- Z-AXIS JUMPING: Jump over walls and avoid ground hazards.", 130, 160, 10, WHITE);
+    DrawText("- PROCEDURAL MATH: Animations run on pure sine logic, no sprites.", 130, 175, 10, WHITE);
 
     DrawText("CONTROLS:", 120, 210, 15, SKYBLUE);
-    DrawText("- [W, A, S, D]: Move  |  [Mouse 1]: Hold to Charge & Cast", 130, 235, 10, WHITE);
-    DrawText("- [SPACE]: Toggle Target (Ground vs Air)", 130, 250, 10, GREEN); 
+    DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [Mouse 1]: Hold to Cast", 130, 235, 10, WHITE);
+    DrawText("- [SHIFT]: Toggle Cast Target (Ground vs Air)", 130, 250, 10, GREEN); 
     DrawText("- [ ` ]: Compiler   |   [ESC]: Guide", 130, 265, 10, WHITE);
-    DrawText("- [ TAB ]: Quick-Swap Vision  |  [ [ ] & [ ] ]: Fine-tune Vision Blend", 130, 280, 10, PURPLE);
+    DrawText("- [ TAB ]: Quick-Swap Vision  |  [ [ ] & [ ] ]: Fine-tune Blend", 130, 280, 10, PURPLE);
 }

@@ -47,10 +47,16 @@ typedef struct {
     int layer;
     float life;
     bool active;
+    float animOffset; // For projectile trailing effects
 } Projectile;
 
 typedef struct {
     Vector2 pos;
+    float z;          // NEW: Player height off the ground
+    float zVelocity;  // NEW: Upward/downward momentum
+    bool isJumping;   // NEW: State flag
+    float animTime;   // NEW: For procedural breathing/pulsating
+
     float speed;
     float health;       
     float maxHealth;
@@ -63,7 +69,7 @@ typedef struct {
     bool isCrafting;
     bool showGuide;
     
-    float visionBlend; // NEW: 0.0 (Material) to 1.0 (Energy)
+    float visionBlend; 
     int castLayer; 
 } Player;
 
@@ -73,9 +79,9 @@ extern Projectile projectiles[100];
 
 void InitSimulation();
 void UpdateSimulation(float dt, Player *p); 
-void MovePlayer(Player *p, Vector2 delta); 
-void DrawMaterialRealm(float alpha); // NEW: Accepts opacity multiplier
-void DrawEnergyRealm(float alpha);   // NEW: Accepts opacity multiplier
+void MovePlayer(Player *p, Vector2 delta, float dt); 
+void DrawMaterialRealm(float alpha); 
+void DrawEnergyRealm(float alpha);   
 void DrawProjectiles();
 void DrawInterface(Player *p, SpellDNA *draft);
 void DrawGuideMenu(Player *p);
