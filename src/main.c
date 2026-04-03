@@ -1,7 +1,7 @@
 #include "util.h"
 
 int main() {
-    InitWindow(800, 450, "Metsys: Procedural Simulation");
+    InitWindow(800, 450, "Metsys: Infinite Spell Compiler");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL); 
     InitSimulation();
@@ -22,9 +22,27 @@ int main() {
     player.isCharging = false;
     player.visionBlend = 0.0f; 
     
+    // Initialize the Infinite Canvas Data
+    for(int i=0; i<MAX_NODES; i++) player.sigil.nodes[i].active = false;
+    
+    // Setup Node 0 as the un-deletable CORE
+    player.sigil.nodes[0].active = true;
+    player.sigil.nodes[0].parentId = -1;
+    player.sigil.nodes[0].pos = (Vector2){0, 0};
+    player.sigil.nodes[0].temp = 20.0f;
+    player.sigil.nodes[0].movement = MOVE_STRAIGHT;
+    player.selectedNodeId = 0;
+
+    // FIX: Properly center the 2D Camera inside the Right Panel
+    // The panel starts at X=250 with Width=500. Center is 250 + 250 = 500.
+    // The panel starts at Y=50 with Height=360. Center is 50 + 180 = 230.
+    player.craftCamera.target = (Vector2){0, 0};
+    player.craftCamera.offset = (Vector2){500, 230}; 
+    player.craftCamera.rotation = 0.0f;
+    player.craftCamera.zoom = 1.0f;
+    
     SpellDNA draft = { 0 };
-    draft.temp = 20.0f; 
-    draft.form = FORM_PROJECTILE;
+    player.selectedForm = FORM_PROJECTILE;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
@@ -39,10 +57,9 @@ int main() {
 
         if (!player.isCrafting && !player.showGuide && player.health > 0) {
             
-            // JUMP LOGIC
             if (IsKeyPressed(KEY_SPACE) && !player.isJumping) {
                 player.isJumping = true;
-                player.zVelocity = 250.0f; // Initial jump impulse
+                player.zVelocity = 250.0f; 
             }
 
             Vector2 delta = {0, 0};
@@ -50,7 +67,7 @@ int main() {
             if (IsKeyDown(KEY_S)) delta.y += player.speed * dt;
             if (IsKeyDown(KEY_A)) delta.x -= player.speed * dt;
             if (IsKeyDown(KEY_D)) delta.x += player.speed * dt;
-            MovePlayer(&player, delta, dt); // Now takes dt for gravity
+            MovePlayer(&player, delta, dt); 
             
             for (int i = 0; i < 9; i++) if (IsKeyPressed(KEY_ONE + i)) player.activeSlot = i;
 
@@ -73,26 +90,11 @@ int main() {
 
             DrawMaterialRealm(1.0f - (player.visionBlend * 0.8f)); 
             DrawEnergyRealm(player.visionBlend);
-            DrawProjectiles();
             
-            // DRAW PROCEDURAL PLAYER ANIMATION
-            if (player.health > 0) {
-                // Base shadow
-                DrawEllipse(player.pos.x, player.pos.y, 6, 3, Fade(BLACK, 0.6f));
-                
-                // Procedural Squash & Stretch based on Z-Velocity
-                float stretch = 1.0f + (player.zVelocity / 1000.0f); // Stretches when moving fast vertically
-                float squash = 1.0f / stretch;
-                
-                // Idle breathing applied to width
-                float breathe = (sinf(player.animTime * 4.0f) + 1.0f) * 0.5f;
-                float currentWidth = (6.0f * squash) + (breathe * 1.5f);
-                float currentHeight = 6.0f * stretch;
-
-                DrawEllipse(player.pos.x, player.pos.y - player.z, currentWidth, currentHeight, RAYWHITE); 
-            } else {
-                DrawText("YOU DIED TO THE ELEMENTS", 250, 200, 20, RED);
-            }
+            DrawProjectiles(&player);
+            DrawPlayerEntity(&player); 
+            
+            if (player.health <= 0) DrawText("YOU DIED TO THE ELEMENTS", 250, 200, 20, RED);
             
             DrawInterface(&player, &draft);
             DrawGuideMenu(&player);

@@ -13,12 +13,23 @@
 #define LAYER_GROUND 0
 #define LAYER_AIR 1
 #define FLOAT_OFFSET 15 
+#define MAX_NODES 64
 
+// Explicit Global Forms (How it spawns)
 typedef enum {
-    FORM_PROJECTILE = 0,
+    FORM_PROJECTILE = 0, 
     FORM_MANIFEST = 1,   
-    FORM_AURA = 2        
+    FORM_AURA = 2,       
+    FORM_BEAM = 3        // Emergent extreme state
 } SpellForm;
+
+// Explicit Node Movements (How it travels)
+typedef enum {
+    MOVE_STRAIGHT = 0,
+    MOVE_SIN = 1,
+    MOVE_COS = 2,
+    MOVE_ORBIT = 3
+} MovementType;
 
 typedef struct {
     float temp;      
@@ -36,26 +47,46 @@ typedef struct {
     float moisture;
     float cohesion;
     float charge;
+    Vector2 velocity;  
     int form;          
+    int movement;      // NEW: Inherited Kinetic Pattern
     bool isPermanent;
 } SpellDNA;
 
 typedef struct {
+    Vector2 pos;       
+    int parentId;      
+    float temp;
+    float density;
+    float moisture;
+    float cohesion;
+    float charge;
+    int movement;      // NEW: Per-Node Movement Assignment
+    bool active;
+} SpellNode;
+
+typedef struct {
+    SpellNode nodes[MAX_NODES];
+    int count;
+} SigilGraph;
+
+typedef struct {
     Vector2 pos;
+    Vector2 basePos; 
     Vector2 velocity;
     SpellDNA payload;
     int layer;
     float life;
     bool active;
-    float animOffset; // For projectile trailing effects
+    float animOffset; 
 } Projectile;
 
 typedef struct {
     Vector2 pos;
-    float z;          // NEW: Player height off the ground
-    float zVelocity;  // NEW: Upward/downward momentum
-    bool isJumping;   // NEW: State flag
-    float animTime;   // NEW: For procedural breathing/pulsating
+    float z;          
+    float zVelocity;  
+    bool isJumping;   
+    float animTime;   
 
     float speed;
     float health;       
@@ -68,9 +99,13 @@ typedef struct {
 
     bool isCrafting;
     bool showGuide;
-    
     float visionBlend; 
     int castLayer; 
+
+    SigilGraph sigil;
+    int selectedNodeId;
+    int selectedForm; // NEW: Explicitly tracks chosen global form
+    Camera2D craftCamera;
 } Player;
 
 extern Cell grid[2][WIDTH * HEIGHT];
@@ -82,13 +117,16 @@ void UpdateSimulation(float dt, Player *p);
 void MovePlayer(Player *p, Vector2 delta, float dt); 
 void DrawMaterialRealm(float alpha); 
 void DrawEnergyRealm(float alpha);   
-void DrawProjectiles();
+void DrawProjectiles(Player *p);
+void DrawPlayerEntity(Player *p); 
 void DrawInterface(Player *p, SpellDNA *draft);
 void DrawGuideMenu(Player *p);
 
+void CompileSigilGraph(Player *p, SpellDNA *draft);
 void ExecuteSpell(Player *p, Vector2 target, SpellDNA dna, float chargeMultiplier);
 void CastProjectile(Vector2 start, Vector2 target, int layer, SpellDNA dna);
 void InjectEnergy(int x, int y, int z, SpellDNA dna);
 void InjectEnergyArea(int cx, int cy, int z, int radius, SpellDNA dna);
+void InjectBeam(Vector2 start, Vector2 target, int z, SpellDNA dna);
 
 #endif
