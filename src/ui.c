@@ -7,10 +7,10 @@ void updateWorld(){
         for (int x = 0; x < gridWidth; x++) {
             int idx = y * gridWidth + x;
             if (canvas[idx] == CELL_SOLID) {
-                DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, GREEN);
+                DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, BROWN);
             } else if (canvas[idx] == CELL_MANA) {
                 // Mana drops as a pure PIXEL_SIZE square now to match the particle aesthetics
-                DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, MAGENTA);
+                DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, SKYBLUE);
             }
         }
     }

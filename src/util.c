@@ -11,7 +11,7 @@ Color getSpellColor(SpellBlueprint bp) {
     if (bp.traits.elements.earth) { r += 130; g += 80;  b += 40;  count++; }
     if (bp.traits.elements.water) { r += 0;   g += 121; b += 241; count++; }
     if (bp.traits.elements.air)   { r += 200; g += 200; b += 200; count++; }
-    if (count == 0) return MAGENTA; 
+    if (count == 0) return BLUE; 
     return (Color){r/count, g/count, b/count, 255};
 }
 
@@ -43,7 +43,7 @@ void updateManaOrbs(Player* player) {
         float x = manaOrbs[i].startPos.x + cosf(manaOrbs[i].angle) * maxRadius;
         float y = manaOrbs[i].startPos.y + sinf(manaOrbs[i].angle) * maxRadius;
         
-        DrawCircle(x, y, 4, MAGENTA);
+        DrawCircle(x, y, 4, BLUE);
     }
 }
 

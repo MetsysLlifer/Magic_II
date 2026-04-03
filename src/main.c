@@ -15,7 +15,7 @@ int main(void)
 
     Player player = {0};
     player.pos = (Vector2){ screenWidth/2.0f, screenHeight/2.0f };
-    player.speed = 150.0f;
+    player.speed = 200.0f;
     player.activeSlot = 0; 
     player.activeCastType = 0; // Default to straight path
     
@@ -79,7 +79,8 @@ int main(void)
             displayCraftingTable(&player, &draftSpell);
             // magiCaft(player);
             displayMovementWheel(&player); // Draws the TAB drag UI overlay
-            
+            DrawText(GetFPS, 100, 100, 10, RED);
+            DrawFPS(100, 100);
         EndDrawing();
     }
 
