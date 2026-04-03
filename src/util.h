@@ -10,15 +10,24 @@
 #define WIDTH (800 / PIXEL_SIZE)
 #define HEIGHT (450 / PIXEL_SIZE)
 
-// Universal Field Variables
+#define LAYER_GROUND 0
+#define LAYER_AIR 1
+#define FLOAT_OFFSET 15 
+
+typedef enum {
+    FORM_PROJECTILE = 0,
+    FORM_MANIFEST = 1,   
+    FORM_AURA = 2        
+} SpellForm;
+
 typedef struct {
-    float temp;      // Thermal Energy
-    float density;   // Mass per volume
-    float moisture;  // Wetness/Fluidity
-    float cohesion;  // How strongly atoms bind (100 = Solid, 0 = Gas)
-    float charge;    // Electrical potential
-    Vector2 velocity; // Kinetic movement across XY plane
-    bool permanent;  // Does not naturally decay
+    float temp;      
+    float density;   
+    float moisture;  
+    float cohesion;  
+    float charge;    
+    Vector2 velocity; 
+    bool permanent;  
 } Cell;
 
 typedef struct {
@@ -27,31 +36,52 @@ typedef struct {
     float moisture;
     float cohesion;
     float charge;
-    Vector2 velocity;
+    int form;          
     bool isPermanent;
 } SpellDNA;
 
 typedef struct {
     Vector2 pos;
+    Vector2 velocity;
+    SpellDNA payload;
+    int layer;
+    float life;
+    bool active;
+} Projectile;
+
+typedef struct {
+    Vector2 pos;
     float speed;
+    float health;       
+    float maxHealth;
     int activeSlot;
     SpellDNA hotbar[10];
     
-    // UI States
+    float chargeLevel; // NEW: Tracks how long the spell is held
+    bool isCharging;   // NEW: State flag for holding
+
     bool isCrafting;
     bool showGuide;
-    bool energyVision; // Toggle between Material (Naked Eye) and Energy Realm
+    bool energyVision; 
+    int castLayer; 
 } Player;
 
-extern Cell grid[WIDTH * HEIGHT];
-extern Cell prev_grid[WIDTH * HEIGHT];
+extern Cell grid[2][WIDTH * HEIGHT];
+extern Cell prev_grid[2][WIDTH * HEIGHT];
+extern Projectile projectiles[100];
 
 void InitSimulation();
-void UpdateSimulation(float dt);
+void UpdateSimulation(float dt, Player *p); 
+void MovePlayer(Player *p, Vector2 delta); // NEW: Handles Collision
 void DrawMaterialRealm();
 void DrawEnergyRealm();
+void DrawProjectiles();
 void DrawInterface(Player *p, SpellDNA *draft);
 void DrawGuideMenu(Player *p);
-void InjectEnergy(int x, int y, SpellDNA dna);
+
+void ExecuteSpell(Player *p, Vector2 target, SpellDNA dna, float chargeMultiplier);
+void CastProjectile(Vector2 start, Vector2 target, int layer, SpellDNA dna);
+void InjectEnergy(int x, int y, int z, SpellDNA dna);
+void InjectEnergyArea(int cx, int cy, int z, int radius, SpellDNA dna);
 
 #endif
