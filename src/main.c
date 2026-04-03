@@ -1,90 +1,66 @@
 #include "util.h"
 
-int main(void)
-{
-    InitWindow(screenWidth, screenHeight, "Magic II");
-    SetTargetFPS(60); 
+int main() {
+    // Standard USC-preferred resolution for USC CS projects
+    InitWindow(800, 450, "Metsys: Emergent Field Simulation");
+    SetTargetFPS(60);
+    InitSimulation();
 
-    gridWidth = screenWidth / PIXEL_SIZE;
-    gridHeight = screenHeight / PIXEL_SIZE;
-    canvas = (unsigned char *)malloc(gridWidth * gridHeight);
-    memset(canvas, 0, gridWidth * gridHeight);
+    // Ensure the player struct is initialized properly
+    Player player = { 0 };
+    player.pos = (Vector2){ 400, 225 };
+    player.speed = 250.0f;
+    player.activeElement = 0;
 
-    MagicSlot slot;
-    initMagicSlot(&slot);
+    while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
 
-    Player player = {0};
-    player.pos = (Vector2){ screenWidth/2.0f, screenHeight/2.0f };
-    player.speed = 200.0f;
-    player.activeSlot = 0; 
-    player.activeCastType = 0; // Default to straight path
-    
-    SpellBlueprint draftSpell = {0};
-    draftSpell.shape = SHAPE_PROJECTILE;
+        // 1. INPUT HANDLING
+        if (IsKeyPressed(KEY_ONE)) player.activeElement = 0;
+        if (IsKeyPressed(KEY_TWO)) player.activeElement = 1;
+        if (IsKeyPressed(KEY_THREE)) player.activeElement = 2;
+        if (IsKeyPressed(KEY_FOUR)) player.activeElement = 3;
 
-    while (!WindowShouldClose()) 
-    {
-        // 1. INPUTS
-        if(IsKeyPressed(KEY_GRAVE)) { 
-            player.isCrafting = !player.isCrafting;
-        }
+        // Corrected Movement Logic
+        if (IsKeyDown(KEY_W)) player.pos.y -= player.speed * dt;
+        if (IsKeyDown(KEY_S)) player.pos.y += player.speed * dt;
+        if (IsKeyDown(KEY_A)) player.pos.x -= player.speed * dt;
+        if (IsKeyDown(KEY_D)) player.pos.x += player.speed * dt;
 
-        // --- NEW: DRAG UI FOR MOVEMENT SELECTION ---
-        if(IsKeyPressed(KEY_TAB)) {
-            player.isSelectingMovement = true;
-            player.dragCenter = GetMousePosition();
-        }
-        if(IsKeyReleased(KEY_TAB)) {
-            player.isSelectingMovement = false;
-        }
-
-        for(int i = 0; i < 9; i++) {
-            if(IsKeyPressed(KEY_ONE + i)) player.activeSlot = i;
-        }
-        if(IsKeyPressed(KEY_ZERO)) player.activeSlot = 9;
-
-        if(!player.isCrafting && !player.isSelectingMovement) {
-            // Left Click spawns orbiting mana
-            if(IsKeyPressed(KEY_EQUAL)) castManaOrb(GetMousePosition());
+        if (IsMouseButtonDown(0)) {
+            Vector2 m = GetMousePosition();
+            int gx = (int)(m.x / PIXEL_SIZE);
+            int gy = (int)(m.y / PIXEL_SIZE);
+            Cell energy = {0};
             
-            // Hold Space to leak mana onto canvas
-            if(IsKeyDown(KEY_SPACE)) leakMana();
+            if (player.activeElement == 0) energy.temp = 45.0f;
+            if (player.activeElement == 1) energy.moisture = 30.0f;
+            if (player.activeElement == 2) energy.density = 20.0f;
+            if (player.activeElement == 3) energy.velocity = (Vector2){0, -10.0f};
 
-            // Press Enter to ACTIVATE the leaked area into Single-Pixel elements!
-            if(IsMouseButtonPressed(0)) activateMana(&slot, &player, GetMousePosition());
-            
-            // Press - to clear world
-            if(IsKeyPressed(KEY_MINUS)) {
-                memset(canvas, 0, gridWidth * gridHeight);
-                initMagicSlot(&slot);
-            }
+            InjectEnergy(gx, gy, energy);
         }
 
-        // 2. UPDATES
-        updatePlayerMovement(&player);
+        // 2. PHYSICS UPDATE
+        UpdateSimulation(dt);
 
-        // 3. DRAW
+        // 3. RENDERING
         BeginDrawing();
-            ClearBackground(RAYWHITE);
+            ClearBackground((Color){10, 10, 15, 255});
             
-            updateWorld(); // Draws Canvas (Walls + Leaked Mana)
-            updateManaOrbs(&player); // Animates orbiting mana, passes player for startPos
-            updateSpellPhysics(&slot); // Moves and collides active single-pixel spells
+            DrawSimulation();
             
             // Draw Player
-            DrawCircleV(player.pos, 10, BLACK);
-            DrawText("PLAYER", player.pos.x - 20, player.pos.y - 20, 10, DARKGRAY);
-
-            displayUI(&player);
-            displayCraftingTable(&player, &draftSpell);
-            // magiCaft(player);
-            displayMovementWheel(&player); // Draws the TAB drag UI overlay
-            DrawText(GetFPS, 100, 100, 10, RED);
-            DrawFPS(100, 100);
+            DrawCircleV(player.pos, 6, RAYWHITE);
+            DrawCircleLines(player.pos.x, player.pos.y, 6, GOLD);
+            
+            // Draw UI (Passing address of player)
+            DrawInterface(&player);
+            
+            DrawFPS(720, 10);
         EndDrawing();
     }
 
-    free(canvas);
-    CloseWindow();       
+    CloseWindow();
     return 0;
 }
