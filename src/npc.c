@@ -35,7 +35,21 @@ void UpdateNPCs(float dt, Player *p) {
         if (gx >= 0 && gx < WIDTH && gy >= 0 && gy < HEIGHT) {
             Cell c = grid[LAYER_GROUND][gy * WIDTH + gx];
             if (c.moisture > 40.0f && c.density > 20.0f && c.cohesion < 50.0f) inWater = true;
-            if (c.temp > 80.0f && n->z <= 0) n->health -= 10.0f * dt; 
+            
+            // NPC PHYSICS INTEGRATION
+            if (n->z < 5.0f) {
+                if (c.temp > 60.0f) n->health -= (c.temp - 60.0f) * 0.5f * dt;
+                if (c.temp < -10.0f) n->health -= fabsf(c.temp + 10.0f) * 0.5f * dt;
+                float momentum = c.density * sqrtf(c.velocity.x*c.velocity.x + c.velocity.y*c.velocity.y);
+                
+                if (momentum > 50.0f) {
+                    n->health -= (momentum - 50.0f) * 0.1f * dt; // Pressure Damage
+                    // Kinetic Knockback!
+                    n->pos.x += c.velocity.x * (momentum / (n->dna.mass + 1.0f)) * dt;
+                    n->pos.y += c.velocity.y * (momentum / (n->dna.mass + 1.0f)) * dt;
+                }
+                if (c.charge > 40.0f) n->health -= c.charge * 0.5f * dt;
+            }
         }
 
         Vector2 targetDir = {0, 0};
@@ -95,14 +109,11 @@ void DrawProceduralNPC(Vector2 pos, float z, NPCDNA dna, float alpha) {
         DrawEllipse(renderPos.x - scale, renderPos.y, scale, 2.0f + flap, Fade(SKYBLUE, alpha));
         DrawEllipse(renderPos.x + scale, renderPos.y, scale, 2.0f + flap, Fade(SKYBLUE, alpha));
     }
-    
     if (dna.hydro > 30.0f) {
         float swish = sinf(GetTime() * 5.0f) * (scale / 2.0f);
-        DrawTriangle(renderPos, 
-                     (Vector2){renderPos.x - scale + swish, renderPos.y + scale*1.5f}, 
+        DrawTriangle(renderPos, (Vector2){renderPos.x - scale + swish, renderPos.y + scale*1.5f}, 
                      (Vector2){renderPos.x + scale + swish, renderPos.y + scale*1.5f}, Fade(DARKBLUE, alpha));
     }
-
     if (dna.terrestrial > 30.0f && z <= 0.0f) {
         float march = sinf(GetTime() * 10.0f) * 3.0f;
         DrawLineEx(renderPos, (Vector2){renderPos.x - scale/2, renderPos.y + scale + march}, 2.0f, Fade(BROWN, alpha));
@@ -110,7 +121,6 @@ void DrawProceduralNPC(Vector2 pos, float z, NPCDNA dna, float alpha) {
     }
 
     DrawEllipse(renderPos.x, renderPos.y, scale + (breathe * 0.5f), scale, baseCol);
-    
     if (dna.intelligence > 0.0f) {
         float eyeSize = 1.0f + (dna.intelligence / 25.0f);
         DrawCircle(renderPos.x, renderPos.y - (scale/2), eyeSize, Fade(RAYWHITE, alpha));

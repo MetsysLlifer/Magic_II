@@ -4,56 +4,48 @@ Cell grid[2][WIDTH * HEIGHT];
 Cell prev_grid[2][WIDTH * HEIGHT];
 Projectile projectiles[100];
 
-void CompileSigilGraph(Player *p, SpellDNA *draft) {
-    draft->temp = 20.0f; draft->density = 0.0f; draft->moisture = 0.0f; 
-    draft->cohesion = 0.0f; draft->charge = 0.0f; draft->velocity = (Vector2){0,0};
+void CompileSigilGraph(SpellDNA *dna) {
+    dna->temp = 20.0f; dna->density = 0.0f; dna->moisture = 0.0f; 
+    dna->cohesion = 0.0f; dna->charge = 0.0f; dna->velocity = (Vector2){0,0};
     
-    draft->form = p->selectedForm; 
-    draft->movement = MOVE_STRAIGHT; 
-    draft->isPermanent = false;
-    
-    if (p->sigil.nodes[0].active) {
-        draft->movement = p->sigil.nodes[0].movement;
-    }
+    dna->movement = MOVE_STRAIGHT; 
+    if (dna->graph.nodes[0].active) dna->movement = dna->graph.nodes[0].movement;
 
     float maxDist = 0.0f;
 
     for(int i = 0; i < MAX_NODES; i++) {
-        if (!p->sigil.nodes[i].active) continue;
-        SpellNode n = p->sigil.nodes[i];
+        if (!dna->graph.nodes[i].active) continue;
+        SpellNode n = dna->graph.nodes[i];
 
         float magnitude = 1.0f;
         Vector2 dir = {0, 0};
 
-        if (n.parentId != -1 && p->sigil.nodes[n.parentId].active) {
-            SpellNode parent = p->sigil.nodes[n.parentId];
+        if (n.parentId != -1 && dna->graph.nodes[n.parentId].active) {
+            SpellNode parent = dna->graph.nodes[n.parentId];
             float dx = n.pos.x - parent.pos.x;
             float dy = n.pos.y - parent.pos.y;
             float dist = sqrtf(dx*dx + dy*dy);
             
             magnitude = (dist / 40.0f) + 1.0f; 
-            if (dist > 0) {
-                dir.x = dx / dist;
-                dir.y = dy / dist;
-            }
+            if (dist > 0) { dir.x = dx / dist; dir.y = dy / dist; }
             if (dist > maxDist) maxDist = dist;
         }
 
-        draft->temp += n.temp * magnitude;
-        draft->density += n.density * magnitude;
-        draft->moisture += n.moisture * magnitude;
-        draft->charge += n.charge * magnitude;
-        draft->cohesion = (draft->cohesion == 0) ? n.cohesion : (draft->cohesion + n.cohesion) / 2.0f;
+        dna->temp += n.temp * magnitude;
+        dna->density += n.density * magnitude;
+        dna->moisture += n.moisture * magnitude;
+        dna->charge += n.charge * magnitude;
+        dna->cohesion = (dna->cohesion == 0) ? n.cohesion : (dna->cohesion + n.cohesion) / 2.0f;
 
         if (n.parentId != -1) {
             float force = (fabsf(n.density) + fabsf(n.temp)) * magnitude;
-            draft->velocity.x += dir.x * force;
-            draft->velocity.y += dir.y * force;
+            dna->velocity.x += dir.x * force;
+            dna->velocity.y += dir.y * force;
         }
     }
 
-    if (draft->temp > 150.0f && draft->charge > 100.0f) draft->form = FORM_BEAM; 
-    if (draft->cohesion > 150.0f && draft->density > 100.0f) draft->isPermanent = true;
+    if (dna->temp > 150.0f && dna->charge > 100.0f) dna->form = FORM_BEAM; 
+    if (dna->cohesion > 150.0f && dna->density > 100.0f) dna->isPermanent = true;
 }
 
 void InitSimulation() {
@@ -90,10 +82,9 @@ void MovePlayer(Player *p, Vector2 delta, float dt) {
         p->z += p->zVelocity * dt;
         p->zVelocity -= 600.0f * dt; 
         if (p->z <= 0.0f) {
-            p->z = 0.0f;
-            p->zVelocity = 0.0f;
-            p->isJumping = false;
-            SpellDNA impact = {0, 5.0f, 0, 0, 0, {0,0}, FORM_AURA, MOVE_STRAIGHT, false};
+            p->z = 0.0f; p->zVelocity = 0.0f; p->isJumping = false;
+            // Removed permanent from impact parameter initialization
+            SpellDNA impact = {0, 5.0f, 0, 0, 0, {0,0}, FORM_AURA, MOVE_STRAIGHT, false, {0}};
             InjectEnergyArea(nx, ny, LAYER_GROUND, 1, impact);
         }
     }
@@ -110,12 +101,20 @@ void Diffuse(float dt) {
             for (int y = 1; y < HEIGHT - 1; y++) {
                 for (int x = 1; x < WIDTH - 1; x++) {
                     int i = y * WIDTH + x;
+                    
+                    // BALANCED UNIVERSAL CONDUCTIVITY: Heat and Charge diffuse through everything (even rocks)
+                    float thermalRate = base_rate * 1.5f;
+                    grid[z][i].temp = (prev_grid[z][i].temp + thermalRate * (grid[z][i-1].temp + grid[z][i+1].temp + grid[z][i-WIDTH].temp + grid[z][i+WIDTH].temp)) / (1 + 4 * thermalRate);
+                    grid[z][i].charge = (prev_grid[z][i].charge + thermalRate * (grid[z][i-1].charge + grid[z][i+1].charge + grid[z][i-WIDTH].charge + grid[z][i+WIDTH].charge)) / (1 + 4 * thermalRate);
+
+                    // STRUCTURAL INTEGRITY: Solid rock blocks mass and fluid diffusion
                     if (grid[z][i].permanent && grid[z][i].cohesion > 80.0f) continue;
+                    
                     float spread = fmax(0.0f, 1.0f - (grid[z][i].cohesion / 100.0f));
                     float rate = base_rate * spread;
-                    grid[z][i].temp = (prev_grid[z][i].temp + rate * (grid[z][i-1].temp + grid[z][i+1].temp + grid[z][i-WIDTH].temp + grid[z][i+WIDTH].temp)) / (1 + 4 * rate);
-                    if (spread > 0.1f) {
+                    if (spread > 0.05f) {
                         grid[z][i].density = (prev_grid[z][i].density + rate * (grid[z][i-1].density + grid[z][i+1].density + grid[z][i-WIDTH].density + grid[z][i+WIDTH].density)) / (1 + 4 * rate);
+                        grid[z][i].moisture = (prev_grid[z][i].moisture + rate * (grid[z][i-1].moisture + grid[z][i+1].moisture + grid[z][i-WIDTH].moisture + grid[z][i+WIDTH].moisture)) / (1 + 4 * rate);
                     }
                 }
             }
@@ -130,30 +129,47 @@ void UpdateSimulation(float dt, Player *p) {
 
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
         for (int z = 0; z < 2; z++) {
+            // UNIVERSAL THERMODYNAMICS: Everything cools down and grounds its charge over time.
+            if (grid[z][i].temp > 20.0f) grid[z][i].temp *= 0.99f; 
+            if (grid[z][i].temp < 20.0f) grid[z][i].temp += 0.1f; 
+            grid[z][i].charge *= 0.92f; // Fast static grounding
+            grid[z][i].velocity.x *= 0.95f; // Friction
+            grid[z][i].velocity.y *= 0.95f;
+
             if (!grid[z][i].permanent) {
-                if (grid[z][i].temp > 20.0f) grid[z][i].temp *= 0.99f; 
-                if (grid[z][i].temp < 20.0f) grid[z][i].temp += 0.1f; 
                 grid[z][i].moisture *= 0.99f;
-                grid[z][i].charge *= 0.95f; 
-                grid[z][i].velocity.x *= 0.95f;
-                grid[z][i].velocity.y *= 0.95f;
             }
+            
+            // Phase transitions
             if (grid[z][i].temp > 80.0f && grid[z][i].cohesion > 30.0f) grid[z][i].cohesion -= 0.5f; 
             if (grid[z][i].temp < 0.0f && grid[z][i].cohesion < 90.0f && grid[z][i].moisture > 10.0f) grid[z][i].cohesion += 1.0f; 
 
+            // BALANCED FLUID ADVECTION: Kinetic force carries Heat and Charge WITH it!
             if (fabsf(grid[z][i].velocity.x) > 1.0f || fabsf(grid[z][i].velocity.y) > 1.0f) {
                 int nextX = (i % WIDTH) + (grid[z][i].velocity.x > 0 ? 1 : -1);
                 int nextY = (i / WIDTH) + (grid[z][i].velocity.y > 0 ? 1 : -1);
                 if (nextX >= 0 && nextX < WIDTH && nextY >= 0 && nextY < HEIGHT) {
                     int nextI = nextY * WIDTH + nextX;
                     if (!grid[z][nextI].permanent) {
-                        grid[z][nextI].density += grid[z][i].density * 0.1f;
-                        grid[z][i].density *= 0.9f;
+                        float advect = 0.15f; // Transfer rate
+                        grid[z][nextI].density += grid[z][i].density * advect;
+                        grid[z][i].density *= (1.0f - advect);
+
+                        // Heat travels with the wind, preventing invisible cores
+                        float heatDiff = grid[z][i].temp - 20.0f;
+                        if (heatDiff > 0) {
+                            grid[z][nextI].temp += heatDiff * advect;
+                            grid[z][i].temp -= heatDiff * advect;
+                        }
+                        
+                        grid[z][nextI].charge += grid[z][i].charge * advect;
+                        grid[z][i].charge *= (1.0f - advect);
                     }
                 }
             }
         }
 
+        // Z-Axis Layer Physics
         if (grid[LAYER_AIR][i].density > 20.0f && grid[LAYER_AIR][i].cohesion > 20.0f) {
             grid[LAYER_GROUND][i].temp += grid[LAYER_AIR][i].density * 0.5f; 
             grid[LAYER_GROUND][i].density += grid[LAYER_AIR][i].density;
@@ -208,9 +224,17 @@ void UpdateSimulation(float dt, Player *p) {
 
         int gx = (int)(projectiles[i].pos.x / PIXEL_SIZE);
         int gy = (int)(projectiles[i].pos.y / PIXEL_SIZE);
+        bool hitSolid = (gx >= 0 && gx < WIDTH && gy >= 0 && gy < HEIGHT) ? (grid[projectiles[i].layer][gy * WIDTH + gx].cohesion > 80.0f) : true;
 
-        bool hitSolid = (gx >= 0 && gx < WIDTH && gy >= 0 && gy < HEIGHT) ? 
-                        (grid[projectiles[i].layer][gy * WIDTH + gx].cohesion > 80.0f) : true;
+        if (!hitSolid) {
+            for (int j = 0; j < 50; j++) {
+                if (active_npcs[j].active) {
+                    float dx = projectiles[i].pos.x - active_npcs[j].pos.x;
+                    float dy = projectiles[i].pos.y - active_npcs[j].pos.y;
+                    if (dx*dx + dy*dy < 400.0f) { hitSolid = true; break; }
+                }
+            }
+        }
 
         if (projectiles[i].life <= 0 || hitSolid) {
             int radius = (int)(projectiles[i].payload.density / 20.0f) + 1;
@@ -221,15 +245,13 @@ void UpdateSimulation(float dt, Player *p) {
 
     int px = (int)(p->pos.x / PIXEL_SIZE);
     int py = (int)(p->pos.y / PIXEL_SIZE);
-    if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT) {
-        if (p->z < 5.0f) {
-            Cell g = grid[LAYER_GROUND][py * WIDTH + px];
-            if (g.temp > 60.0f) p->health -= (g.temp - 60.0f) * 0.5f * dt;
-            if (g.temp < -10.0f) p->health -= fabsf(g.temp + 10.0f) * 0.5f * dt;
-            float momentum = g.density * sqrtf(g.velocity.x*g.velocity.x + g.velocity.y*g.velocity.y);
-            if (momentum > 150.0f) p->health -= (momentum - 150.0f) * 0.1f * dt;
-            if (g.charge > 40.0f) p->health -= g.charge * 0.2f * dt;
-        }
+    if (px >= 0 && px < WIDTH && py >= 0 && py < HEIGHT && p->z < 5.0f) {
+        Cell g = grid[LAYER_GROUND][py * WIDTH + px];
+        if (g.temp > 60.0f) p->health -= (g.temp - 60.0f) * 0.5f * dt;
+        if (g.temp < -10.0f) p->health -= fabsf(g.temp + 10.0f) * 0.5f * dt;
+        float momentum = g.density * sqrtf(g.velocity.x*g.velocity.x + g.velocity.y*g.velocity.y);
+        if (momentum > 150.0f) p->health -= (momentum - 150.0f) * 0.1f * dt;
+        if (g.charge > 40.0f) p->health -= g.charge * 0.2f * dt;
     }
 }
 
@@ -249,18 +271,10 @@ void ExecuteSpell(Player *p, Vector2 target, SpellDNA dna, float chargeMultiplie
     int radius = (int)(1 + chargeMultiplier);
 
     switch(dna.form) {
-        case FORM_PROJECTILE:
-            CastProjectile(p->pos, target, p->castLayer, scaledDna);
-            break;
-        case FORM_MANIFEST:
-            InjectEnergyArea(gx, gy, p->castLayer, radius + 1, scaledDna); 
-            break;
-        case FORM_AURA:
-            InjectEnergyArea(px, py, p->castLayer, radius + 3, scaledDna); 
-            break;
-        case FORM_BEAM:
-            InjectBeam(p->pos, target, p->castLayer, scaledDna);
-            break;
+        case FORM_PROJECTILE: CastProjectile(p->pos, target, p->castLayer, scaledDna); break;
+        case FORM_MANIFEST: InjectEnergyArea(gx, gy, p->castLayer, radius + 1, scaledDna); break;
+        case FORM_AURA: InjectEnergyArea(px, py, p->castLayer, radius + 3, scaledDna); break;
+        case FORM_BEAM: InjectBeam(p->pos, target, p->castLayer, scaledDna); break;
     }
 }
 
@@ -276,10 +290,7 @@ void CastProjectile(Vector2 start, Vector2 target, int layer, SpellDNA dna) {
             projectiles[i].animOffset = 0.0f;
             
             float angle = atan2f(target.y - start.y, target.x - start.x);
-            projectiles[i].velocity = (Vector2){ 
-                (cosf(angle) * 350.0f) + dna.velocity.x, 
-                (sinf(angle) * 350.0f) + dna.velocity.y 
-            };
+            projectiles[i].velocity = (Vector2){ (cosf(angle) * 350.0f) + dna.velocity.x, (sinf(angle) * 350.0f) + dna.velocity.y };
             break;
         }
     }
@@ -291,15 +302,12 @@ void InjectBeam(Vector2 start, Vector2 target, int z, SpellDNA dna) {
     float steps = sqrtf(dx*dx + dy*dy) / PIXEL_SIZE;
     if (steps == 0) return;
     
-    float xInc = dx / steps;
-    float yInc = dy / steps;
-    float cx = start.x;
-    float cy = start.y;
+    float xInc = dx / steps; float yInc = dy / steps;
+    float cx = start.x; float cy = start.y;
 
     for (int i = 0; i <= (int)steps; i++) {
         InjectEnergy((int)(cx / PIXEL_SIZE), (int)(cy / PIXEL_SIZE), z, dna);
-        cx += xInc;
-        cy += yInc;
+        cx += xInc; cy += yInc;
     }
 }
 

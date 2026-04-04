@@ -1,7 +1,7 @@
 #include "util.h"
 
 int main() {
-    InitWindow(800, 450, "Metsys: Ecosystem Engine");
+    InitWindow(800, 450, "Metsys: Dual Paradigm Ecosystem");
     SetTargetFPS(60);
     SetExitKey(KEY_NULL); 
     InitSimulation();
@@ -10,60 +10,58 @@ int main() {
     Player player = { 0 };
     player.pos = (Vector2){400, 225};
     player.z = 0.0f;
-    player.zVelocity = 0.0f;
-    player.isJumping = false;
-    player.animTime = 0.0f;
-
     player.speed = 200.0f;
     player.health = 100.0f;
     player.maxHealth = 100.0f;
     player.activeSlot = 0;
     player.castLayer = LAYER_GROUND; 
-    player.chargeLevel = 0.0f;
-    player.isCharging = false;
-    player.visionBlend = 0.0f; 
     player.craftCategory = 0;
+    player.draggingNodeId = -1;
     
-    for(int i=0; i<10; i++) player.hotbar[i].type = ITEM_SPELL;
-    
-    for(int i=0; i<MAX_NODES; i++) player.sigil.nodes[i].active = false;
-    
-    player.sigil.nodes[0].active = true;
-    player.sigil.nodes[0].parentId = -1;
-    player.sigil.nodes[0].pos = (Vector2){0, 0};
-    player.sigil.nodes[0].temp = 20.0f;
-    player.sigil.nodes[0].movement = MOVE_STRAIGHT;
-    player.selectedNodeId = 0;
+    for(int i=0; i<10; i++) {
+        player.hotbar[i].type = ITEM_SPELL;
+        for(int j=0; j<MAX_NODES; j++) player.hotbar[i].spell.graph.nodes[j].active = false;
+        player.hotbar[i].spell.graph.nodes[0].active = true;
+        player.hotbar[i].spell.graph.nodes[0].parentId = -1;
+        player.hotbar[i].spell.graph.nodes[0].pos = (Vector2){0, 0};
+        player.hotbar[i].spell.graph.nodes[0].temp = 20.0f;
+        player.hotbar[i].spell.graph.nodes[0].movement = MOVE_STRAIGHT;
+        player.hotbar[i].spell.form = FORM_PROJECTILE;
+    }
 
+    player.selectedNodeId = 0;
     player.craftCamera.target = (Vector2){0, 0};
     player.craftCamera.offset = (Vector2){495, 230}; 
-    player.craftCamera.rotation = 0.0f;
     player.craftCamera.zoom = 1.0f;
     
-    SpellDNA draftSpell = { 0 };
     NPCDNA draftNPC = { 50, 0, 0, 50, 50, 0 };
-    player.selectedForm = FORM_PROJECTILE;
 
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
 
         if (IsKeyPressed(KEY_ESCAPE)) player.showGuide = !player.showGuide;
-        if (IsKeyPressed(KEY_GRAVE) && !player.showGuide) player.isCrafting = !player.isCrafting;
+        if (IsKeyPressed(KEY_GRAVE) && !player.showGuide) {
+            player.isCrafting = !player.isCrafting;
+            player.draggingNodeId = -1; 
+        }
         
+        // TAB Logic: Swaps Compiler OR cycles Vision 0.0 -> 1.0 -> 2.0
         if (IsKeyPressed(KEY_TAB)) {
             if (player.isCrafting) {
                 player.craftCategory = (player.craftCategory == 0) ? 1 : 0; 
             } else {
-                player.visionBlend = (player.visionBlend > 0.5f) ? 0.0f : 1.0f; 
+                if (player.visionBlend < 0.5f) player.visionBlend = 1.0f;
+                else if (player.visionBlend < 1.5f) player.visionBlend = 2.0f;
+                else player.visionBlend = 0.0f;
             }
         }
         
         if (IsKeyPressed(KEY_LEFT_SHIFT)) player.castLayer = !player.castLayer; 
-        if (IsKeyDown(KEY_RIGHT_BRACKET)) player.visionBlend = fminf(1.0f, player.visionBlend + dt * 1.5f);
+        // Scrub smoothly up to 2.0 for the Hazard Realm
+        if (IsKeyDown(KEY_RIGHT_BRACKET)) player.visionBlend = fminf(2.0f, player.visionBlend + dt * 1.5f);
         if (IsKeyDown(KEY_LEFT_BRACKET)) player.visionBlend = fmaxf(0.0f, player.visionBlend - dt * 1.5f);
 
         if (!player.isCrafting && !player.showGuide && player.health > 0) {
-            
             if (IsKeyPressed(KEY_SPACE) && !player.isJumping) {
                 player.isJumping = true; player.zVelocity = 250.0f; 
             }
@@ -91,9 +89,7 @@ int main() {
                 }
             } 
             else if (active->type == ITEM_NPC) {
-                if (IsMouseButtonPressed(0)) {
-                    SpawnNPC(GetMousePosition(), active->npc);
-                }
+                if (IsMouseButtonPressed(0)) SpawnNPC(GetMousePosition(), active->npc);
             }
         }
 
@@ -103,8 +99,14 @@ int main() {
         BeginDrawing();
             ClearBackground((Color){20, 20, 25, 255}); 
 
-            DrawMaterialRealm(1.0f - (player.visionBlend * 0.8f)); 
-            DrawEnergyRealm(player.visionBlend);
+            // Calculate the 3-Way Alpha Fading Matrix
+            float matAlpha = 1.0f - (fminf(player.visionBlend, 2.0f) * 0.4f); // Keeps Material 60% visible at all times
+            float nrgAlpha = 1.0f - fabsf(player.visionBlend - 1.0f);         // Peaks exactly at 1.0
+            float hazAlpha = fmaxf(0.0f, player.visionBlend - 1.0f);          // Peaks exactly at 2.0
+
+            DrawMaterialRealm(matAlpha); 
+            if (nrgAlpha > 0.01f) DrawEnergyRealm(nrgAlpha);
+            if (hazAlpha > 0.01f) DrawHazardRealm(hazAlpha);
             
             DrawNPCs(); 
             DrawProjectiles(&player);
@@ -118,7 +120,7 @@ int main() {
 
             if (player.health <= 0) DrawText("YOU DIED TO THE ELEMENTS", 250, 200, 20, RED);
             
-            DrawInterface(&player, &draftSpell, &draftNPC);
+            DrawInterface(&player, &draftNPC);
             DrawGuideMenu(&player);
 
         EndDrawing();

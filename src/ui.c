@@ -4,23 +4,17 @@
 
 void DrawProceduralSigil(Vector2 center, SpellNode node, float scale) {
     int points = 3 + (int)(node.charge / 15.0f); 
-    if (points > 10) points = 10;
-    if (points < 3) points = 3;
-    
+    if (points > 10) points = 10; if (points < 3) points = 3;
     float baseRadius = scale * (0.5f + (node.density / 100.0f)); 
     float spikeFactor = (node.temp / 100.0f) * scale; 
     float waveFactor = (node.moisture / 100.0f); 
-
-    Color baseColor = (node.charge > 50.0f) ? PURPLE : 
-                      (node.temp > 50.0f) ? RED : 
-                      (node.moisture > 50.0f) ? SKYBLUE : GOLD;
+    Color baseColor = (node.charge > 50.0f) ? PURPLE : (node.temp > 50.0f) ? RED : (node.moisture > 50.0f) ? SKYBLUE : GOLD;
 
     Vector2 pLast = {0};
     for (int i = 0; i <= points; i++) {
         float angle = (i * (PI * 2.0f)) / points;
         float r = baseRadius + (i % 2 == 0 ? spikeFactor : -spikeFactor * 0.5f);
         Vector2 p = { center.x + cosf(angle) * r, center.y + sinf(angle) * r };
-
         if (i > 0) {
             DrawLineEx(pLast, p, 2.0f, baseColor); 
             if (waveFactor > 0.1f) {
@@ -115,6 +109,50 @@ void DrawEnergyRealm(float alpha) {
     }
 }
 
+// NEW: Hazard Realm visually parses the grid scalars for potential player harm
+void DrawHazardRealm(float alpha) {
+    if (alpha <= 0.0f) return;
+    for (int z = 0; z < 2; z++) {
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                Cell c = grid[z][y * WIDTH + x];
+                
+                // Mirroring the physics engine's damage math
+                float heatHarm = fmaxf(0.0f, c.temp - 60.0f) / 50.0f; 
+                float coldHarm = fmaxf(0.0f, -10.0f - c.temp) / 50.0f;
+                float momentum = c.density * sqrtf(c.velocity.x*c.velocity.x + c.velocity.y*c.velocity.y);
+                float kinHarm = fmaxf(0.0f, momentum - 150.0f) / 100.0f;
+                float shockHarm = fmaxf(0.0f, c.charge - 40.0f) / 50.0f;
+                
+                float totalHarm = heatHarm + coldHarm + kinHarm + shockHarm;
+                if (totalHarm <= 0.0f) continue;
+
+                // Color mixing based on danger type
+                unsigned char r = (unsigned char)fmin(255, (heatHarm + kinHarm + shockHarm) * 255);
+                unsigned char g = (unsigned char)fmin(255, (kinHarm) * 255);
+                unsigned char b = (unsigned char)fmin(255, (coldHarm + shockHarm) * 255);
+                
+                // Lethal cells pulse violently
+                float pulse = (sinf(GetTime() * 15.0f) + 1.0f) * 0.5f;
+                unsigned char finalAlpha = (unsigned char)(fminf(255, totalHarm * 150 + (pulse * 100)) * alpha);
+
+                int yOffset = (z == LAYER_AIR) ? FLOAT_OFFSET : 0;
+                DrawRectangle(x * PIXEL_SIZE, (y * PIXEL_SIZE) - yOffset, PIXEL_SIZE, PIXEL_SIZE, (Color){r, g, b, finalAlpha});
+            }
+        }
+    }
+    
+    // Expose Hostile Biological Entities
+    for(int i=0; i<50; i++) {
+        if(active_npcs[i].active && active_npcs[i].dna.hostility > 50.0f) {
+            Vector2 pCenter = {active_npcs[i].pos.x, active_npcs[i].pos.y - active_npcs[i].z};
+            float pulse = (sinf(GetTime() * 10.0f) + 1.0f) * 0.5f;
+            DrawCircleLines(pCenter.x, pCenter.y, 10.0f + (pulse * 5.0f), Fade(RED, alpha));
+            DrawText("! HOSTILE !", pCenter.x - 25, pCenter.y - 20, 10, Fade(RED, alpha));
+        }
+    }
+}
+
 void DrawProjectiles(Player *p) {
     for(int i=0; i<100; i++) {
         if(projectiles[i].active) {
@@ -146,7 +184,7 @@ void DrawPlayerEntity(Player *p) {
 
     DrawEllipse(p->pos.x, p->pos.y - p->z, currentWidth, currentHeight, RAYWHITE); 
 
-    if (p->isCharging) {
+    if (p->isCharging && p->hotbar[p->activeSlot].type == ITEM_SPELL) {
         float maxCharge = 3.0f;
         float radius = 10.0f + (p->chargeLevel / maxCharge) * 30.0f;
         float pulse = (sinf(p->animTime * 10.0f) + 1.0f) * 0.5f; 
@@ -155,8 +193,8 @@ void DrawPlayerEntity(Player *p) {
         DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
         DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
 
-        HotbarSlot activeSlot = p->hotbar[p->activeSlot];
-        if (activeSlot.type == ITEM_SPELL && activeSlot.spell.charge > 10.0f) {
+        SpellDNA activeDNA = p->hotbar[p->activeSlot].spell;
+        if (activeDNA.charge > 10.0f) {
             float t = GetTime() * 40.0f;
             float sparkRadius = radius + 3.0f;
             for(int i = 0; i < 3; i++) {
@@ -169,7 +207,7 @@ void DrawPlayerEntity(Player *p) {
     }
 }
 
-void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
+void DrawInterface(Player *p, NPCDNA *draftNPC) {
     DrawRectangle(10, 10, 200, 15, DARKGRAY);
     DrawRectangle(10, 10, (int)((fmax(0, p->health) / p->maxHealth) * 200), 15, RED);
     DrawRectangleLines(10, 10, 200, 15, WHITE);
@@ -180,22 +218,24 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
     DrawText(TextFormat("ACTIVE SLOT: %d", p->activeSlot + 1), 15, 40, 10, GOLD);
     
     HotbarSlot activeSlot = p->hotbar[p->activeSlot];
-    
     if (activeSlot.type == ITEM_SPELL) {
         DrawText("TYPE: ENERGY SCALAR", 15, 55, 10, SKYBLUE);
         DrawText(TextFormat("Temp: %.0f | Mass: %.0f", activeSlot.spell.temp, activeSlot.spell.density), 15, 70, 10, RAYWHITE);
         DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", activeSlot.spell.cohesion, activeSlot.spell.moisture), 15, 85, 10, RAYWHITE);
         DrawText(TextFormat("Chrg: %.0f", activeSlot.spell.charge), 15, 100, 10, RAYWHITE);
-        DrawProceduralSigil((Vector2){100, 130}, p->sigil.nodes[0], 15.0f);
+        DrawProceduralSigil((Vector2){100, 130}, activeSlot.spell.graph.nodes[0], 15.0f);
     } else {
-        DrawText("TYPE: BIO-MATRIX (ASI)", 15, 55, 10, GREEN);
+        DrawText("TYPE: BIO-MATRIX", 15, 55, 10, GREEN);
         DrawText(TextFormat("Mass: %.0f | Int: %.0f", activeSlot.npc.mass, activeSlot.npc.intelligence), 15, 70, 10, RAYWHITE);
         DrawText(TextFormat("Aero: %.0f | Hyd: %.0f", activeSlot.npc.aero, activeSlot.npc.hydro), 15, 85, 10, RAYWHITE);
         DrawText(TextFormat("Terr: %.0f | Hst: %.0f", activeSlot.npc.terrestrial, activeSlot.npc.hostility), 15, 100, 10, RAYWHITE);
         DrawProceduralNPC((Vector2){100, 135}, 0, activeSlot.npc, 1.0f); 
     }
 
-    DrawText(TextFormat("VISION BLEND: %d%%", (int)(p->visionBlend * 100)), 10, 165, 10, PURPLE);
+    // UPDATED VISION BLEND HUD
+    const char* vState = (p->visionBlend < 0.5f) ? "MAT" : (p->visionBlend < 1.5f) ? "NRG" : "HAZ";
+    DrawText(TextFormat("VISION BLEND: %.1f [%s]", p->visionBlend, vState), 10, 165, 10, PURPLE);
+    
     Color targetColor = (p->castLayer == LAYER_AIR) ? SKYBLUE : BROWN;
     DrawText((p->castLayer == LAYER_AIR) ? "Z-TARGET: AIR [SHIFT]" : "Z-TARGET: GROUND [SHIFT]", 10, 180, 12, targetColor);
     DrawText("`=Craft | ESC=Guide | [ / ]=Blend", 10, 195, 10, GRAY);
@@ -208,9 +248,15 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
         DrawRectangleLinesEx(slotRec, (i == p->activeSlot) ? 2 : 1, bColor);
         DrawText(TextFormat("%d", i+1), slotRec.x + 3, slotRec.y + 2, 10, GRAY);
         
-        if (p->hotbar[i].type == ITEM_SPELL && p->hotbar[i].spell.temp != 0) {
-            DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, PURPLE);
-        } else if (p->hotbar[i].type == ITEM_NPC && p->hotbar[i].npc.mass != 0) {
+        if (p->hotbar[i].type == ITEM_SPELL) {
+            if (p->hotbar[i].spell.temp != 20.0f || p->hotbar[i].spell.density != 0.0f) {
+                DrawCircle(slotRec.x + 15, slotRec.y + 10, 3, PURPLE);
+                const char* fStr = (p->hotbar[i].spell.form == FORM_PROJECTILE) ? "PRJ" :
+                                   (p->hotbar[i].spell.form == FORM_MANIFEST) ? "MNF" :
+                                   (p->hotbar[i].spell.form == FORM_AURA) ? "AUR" : "BEM";
+                DrawText(fStr, slotRec.x + 6, slotRec.y + 18, 8, SKYBLUE);
+            }
+        } else {
             DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, GREEN);
         }
     }
@@ -226,12 +272,13 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
         DrawText("BIO MATRIX", 450, 40, 15, npcTab);
 
         if (p->craftCategory == 0) {
+            SpellDNA *activeSpell = &p->hotbar[p->activeSlot].spell;
             Rectangle canvasBounds = {250, 60, 490, 340};
             DrawLine(240, 60, 240, 400, DARKGRAY);
 
             DrawText("NODE PARAMETERS", 60, 70, 15, GOLD);
-            if (p->selectedNodeId != -1 && p->sigil.nodes[p->selectedNodeId].active) {
-                SpellNode *n = &p->sigil.nodes[p->selectedNodeId];
+            if (p->selectedNodeId != -1 && activeSpell->graph.nodes[p->selectedNodeId].active) {
+                SpellNode *n = &activeSpell->graph.nodes[p->selectedNodeId];
                 DrawText(TextFormat("Editing Node ID: %d", p->selectedNodeId), 60, 90, 10, SKYBLUE);
                 GuiSlider((Rectangle){90, 110, 120, 15}, "TEMP", NULL, &n->temp, -100, 200);
                 GuiSlider((Rectangle){90, 135, 120, 15}, "MASS", NULL, &n->density, 0, 100);
@@ -244,82 +291,59 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
                 if(GuiButton((Rectangle){100, 255, 35, 20}, "SIN")) n->movement = MOVE_SIN;
                 if(GuiButton((Rectangle){140, 255, 35, 20}, "COS")) n->movement = MOVE_COS;
                 if(GuiButton((Rectangle){180, 255, 35, 20}, "ORB")) n->movement = MOVE_ORBIT;
-                
                 int mx = (n->movement == 0) ? 60 : (n->movement == 1) ? 100 : (n->movement == 2) ? 140 : 180;
                 DrawRectangleLines(mx, 255, 35, 20, GREEN);
-            } else {
-                DrawText("No Node Selected.", 60, 120, 10, GRAY);
             }
 
             DrawText("GLOBAL FORM:", 60, 290, 10, WHITE);
-            if(GuiButton((Rectangle){60, 305, 50, 25}, "PROJ")) p->selectedForm = FORM_PROJECTILE;
-            if(GuiButton((Rectangle){115, 305, 50, 25}, "MANI")) p->selectedForm = FORM_MANIFEST;
-            if(GuiButton((Rectangle){170, 305, 50, 25}, "AURA")) p->selectedForm = FORM_AURA;
-            
-            int fx = (p->selectedForm == 0) ? 60 : (p->selectedForm == 1) ? 115 : 180;
+            if(GuiButton((Rectangle){60, 305, 50, 25}, "PROJ")) activeSpell->form = FORM_PROJECTILE;
+            if(GuiButton((Rectangle){115, 305, 50, 25}, "MANI")) activeSpell->form = FORM_MANIFEST;
+            if(GuiButton((Rectangle){170, 305, 50, 25}, "AURA")) activeSpell->form = FORM_AURA;
+            int fx = (activeSpell->form == 0) ? 60 : (activeSpell->form == 1) ? 115 : 170;
             DrawRectangleLines(fx, 305, 50, 25, PURPLE);
 
-            GuiCheckBox((Rectangle){60, 345, 15, 15}, "ETERNAL", &draftSpell->isPermanent);
-
-            if (GuiButton((Rectangle){60, 370, 160, 30}, "IMPRINT SPELL")) {
-                CompileSigilGraph(p, draftSpell); 
-                p->hotbar[p->activeSlot].type = ITEM_SPELL;
-                p->hotbar[p->activeSlot].spell = *draftSpell;
-                p->isCrafting = false;
-            }
+            GuiCheckBox((Rectangle){60, 345, 15, 15}, "ETERNAL", &activeSpell->isPermanent);
 
             DrawText("INFINITE COMPILER CANVAS", 250, 65, 15, GOLD);
-            DrawText("L-Click: Add/Select | R-Click: Delete | Scroll: Zoom | Mid-Click: Pan", 250, 85, 10, GRAY);
-
             Vector2 mousePos = GetMousePosition();
             if (CheckCollisionPointRec(mousePos, canvasBounds)) {
                 p->craftCamera.zoom += GetMouseWheelMove() * 0.1f;
-                if (p->craftCamera.zoom < 0.2f) p->craftCamera.zoom = 0.2f;
-                if (p->craftCamera.zoom > 3.0f) p->craftCamera.zoom = 3.0f;
-                
                 if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
                     Vector2 delta = GetMouseDelta();
                     p->craftCamera.target.x -= delta.x / p->craftCamera.zoom;
                     p->craftCamera.target.y -= delta.y / p->craftCamera.zoom;
                 }
-
                 if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
                     Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
                     int clickedId = -1;
-                    
                     for(int i=0; i<MAX_NODES; i++) {
-                        if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
+                        if (activeSpell->graph.nodes[i].active && CheckCollisionPointCircle(worldMouse, activeSpell->graph.nodes[i].pos, 20.0f)) {
                             clickedId = i; break;
                         }
                     }
-
-                    if (clickedId != -1) {
-                        p->selectedNodeId = clickedId; 
-                    } else if (p->selectedNodeId != -1) {
+                    if (clickedId != -1) { p->selectedNodeId = clickedId; p->draggingNodeId = clickedId; } 
+                    else if (p->selectedNodeId != -1) {
                         for(int i=0; i<MAX_NODES; i++) {
-                            if (!p->sigil.nodes[i].active) {
-                                p->sigil.nodes[i].active = true;
-                                p->sigil.nodes[i].parentId = p->selectedNodeId;
-                                p->sigil.nodes[i].pos = worldMouse;
-                                p->sigil.nodes[i].temp = 0; p->sigil.nodes[i].density = 0;
-                                p->sigil.nodes[i].cohesion = 0; p->sigil.nodes[i].moisture = 0; p->sigil.nodes[i].charge = 0;
-                                p->sigil.nodes[i].movement = MOVE_STRAIGHT; 
-                                p->selectedNodeId = i; 
-                                break;
+                            if (!activeSpell->graph.nodes[i].active) {
+                                activeSpell->graph.nodes[i].active = true; activeSpell->graph.nodes[i].parentId = p->selectedNodeId;
+                                activeSpell->graph.nodes[i].pos = worldMouse; activeSpell->graph.nodes[i].movement = MOVE_STRAIGHT;
+                                p->selectedNodeId = i; break;
                             }
                         }
                     }
                 }
+                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && p->draggingNodeId != -1) {
+                    activeSpell->graph.nodes[p->draggingNodeId].pos = GetScreenToWorld2D(mousePos, p->craftCamera);
+                }
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->draggingNodeId = -1;
 
                 if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
                     Vector2 worldMouse = GetScreenToWorld2D(mousePos, p->craftCamera);
                     for(int i=1; i<MAX_NODES; i++) { 
-                        if (p->sigil.nodes[i].active && CheckCollisionPointCircle(worldMouse, p->sigil.nodes[i].pos, 20.0f)) {
-                            p->sigil.nodes[i].active = false;
+                        if (activeSpell->graph.nodes[i].active && CheckCollisionPointCircle(worldMouse, activeSpell->graph.nodes[i].pos, 20.0f)) {
+                            activeSpell->graph.nodes[i].active = false;
                             if (p->selectedNodeId == i) p->selectedNodeId = 0;
-                            for(int j=1; j<MAX_NODES; j++) {
-                                if (p->sigil.nodes[j].parentId == i) p->sigil.nodes[j].active = false;
-                            }
+                            for(int j=1; j<MAX_NODES; j++) if (activeSpell->graph.nodes[j].parentId == i) activeSpell->graph.nodes[j].active = false;
                         }
                     }
                 }
@@ -327,40 +351,28 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
 
             BeginScissorMode(canvasBounds.x, canvasBounds.y, canvasBounds.width, canvasBounds.height);
             BeginMode2D(p->craftCamera);
-                
                 for(int i=-1000; i<1000; i+=50) {
-                    DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f));
-                    DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
+                    DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f)); DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
                 }
-
                 for(int i=0; i<MAX_NODES; i++) {
-                    if (!p->sigil.nodes[i].active || p->sigil.nodes[i].parentId == -1) continue;
-                    Vector2 parentPos = p->sigil.nodes[p->sigil.nodes[i].parentId].pos;
-                    DrawLineEx(parentPos, p->sigil.nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
-                    Vector2 mid = { (parentPos.x + p->sigil.nodes[i].pos.x)/2, (parentPos.y + p->sigil.nodes[i].pos.y)/2 };
-                    DrawCircleV(mid, 3.0f, RAYWHITE);
+                    if (!activeSpell->graph.nodes[i].active || activeSpell->graph.nodes[i].parentId == -1) continue;
+                    Vector2 parentPos = activeSpell->graph.nodes[activeSpell->graph.nodes[i].parentId].pos;
+                    DrawLineEx(parentPos, activeSpell->graph.nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
+                    DrawCircleV((Vector2){(parentPos.x+activeSpell->graph.nodes[i].pos.x)/2, (parentPos.y+activeSpell->graph.nodes[i].pos.y)/2}, 3.0f, RAYWHITE);
                 }
-
                 for(int i=0; i<MAX_NODES; i++) {
-                    if (!p->sigil.nodes[i].active) continue;
+                    if (!activeSpell->graph.nodes[i].active) continue;
                     Color ringColor = (i == p->selectedNodeId) ? GOLD : RAYWHITE;
-                    if (i == 0) DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 25.0f, PURPLE); 
-                    DrawCircleLines(p->sigil.nodes[i].pos.x, p->sigil.nodes[i].pos.y, 18.0f, ringColor);
-                    DrawProceduralSigil(p->sigil.nodes[i].pos, p->sigil.nodes[i], 8.0f);
+                    if (i == 0) DrawCircleLines(activeSpell->graph.nodes[i].pos.x, activeSpell->graph.nodes[i].pos.y, 25.0f, PURPLE); 
+                    DrawCircleLines(activeSpell->graph.nodes[i].pos.x, activeSpell->graph.nodes[i].pos.y, 18.0f, ringColor);
+                    DrawProceduralSigil(activeSpell->graph.nodes[i].pos, activeSpell->graph.nodes[i], 8.0f);
                 }
-                
-                if (p->selectedNodeId != -1 && p->sigil.nodes[p->selectedNodeId].active) {
-                    DrawCircleLines(p->sigil.nodes[p->selectedNodeId].pos.x, p->sigil.nodes[p->selectedNodeId].pos.y, 40.0f, Fade(SKYBLUE, 0.2f));
-                }
-
-            EndMode2D();
-            EndScissorMode();
-            CompileSigilGraph(p, draftSpell);
+            EndMode2D(); EndScissorMode();
+            
+            CompileSigilGraph(activeSpell); 
 
         } else if (p->craftCategory == 1) {
-            DrawText("ARTIFICIAL SUPER INTEL (ASI) COMPILER", 70, 70, 15, GREEN);
-            DrawText("Modify biological and neural scalars.", 70, 90, 10, GRAY);
-            
+            DrawText("ARTIFICIAL SUPER INTEL (ASI)", 70, 70, 15, GREEN);
             GuiSlider((Rectangle){100, 120, 150, 20}, "MASS (HP)", NULL, &draftNPC->mass, 10, 200);
             GuiSlider((Rectangle){100, 150, 150, 20}, "AERO (Fly)", NULL, &draftNPC->aero, 0, 100);
             GuiSlider((Rectangle){100, 180, 150, 20}, "HYDR (Swim)", NULL, &draftNPC->hydro, 0, 100);
@@ -368,13 +380,10 @@ void DrawInterface(Player *p, SpellDNA *draftSpell, NPCDNA *draftNPC) {
             GuiSlider((Rectangle){100, 250, 150, 20}, "INTEL (AI)", NULL, &draftNPC->intelligence, 0, 100);
             GuiSlider((Rectangle){100, 280, 150, 20}, "HOSTILE", NULL, &draftNPC->hostility, 0, 100);
 
-            if (GuiButton((Rectangle){350, 120, 120, 30}, "RANDOM MUTATION")) {
-                draftNPC->mass = GetRandomValue(10, 150);
-                draftNPC->aero = GetRandomValue(0, 100);
-                draftNPC->hydro = GetRandomValue(0, 100);
-                draftNPC->terrestrial = GetRandomValue(0, 100);
-                draftNPC->intelligence = GetRandomValue(0, 100);
-                draftNPC->hostility = GetRandomValue(0, 100);
+            if (GuiButton((Rectangle){350, 120, 120, 30}, "RANDOM MUT")) {
+                draftNPC->mass = GetRandomValue(10, 150); draftNPC->aero = GetRandomValue(0, 100);
+                draftNPC->hydro = GetRandomValue(0, 100); draftNPC->terrestrial = GetRandomValue(0, 100);
+                draftNPC->intelligence = GetRandomValue(0, 100); draftNPC->hostility = GetRandomValue(0, 100);
             }
 
             DrawRectangle(400, 180, 200, 150, Fade(DARKGRAY, 0.5f));
@@ -397,14 +406,14 @@ void DrawGuideMenu(Player *p) {
     DrawText("METSYS: ARCHITECTURE OF MAGIC", 120, 70, 20, GOLD);
     DrawText("--------------------------------------------------", 120, 90, 20, GRAY);
     
-    DrawText("EMERGENT CASTING FORMS:", 120, 120, 15, SKYBLUE);
-    DrawText("- WAVE: Adding High Moisture creates sinusoidal paths.", 130, 145, 10, WHITE);
-    DrawText("- ORBIT: Creating dense, highly charged clusters orbits the player.", 130, 160, 10, WHITE);
-    DrawText("- BEAM: Overwhelming Heat + Charge creates an instant line.", 130, 175, 10, WHITE);
+    DrawText("VISION REALMS (Use [ and ] to blend):", 120, 120, 15, PURPLE);
+    DrawText("- 0.0 to 1.0: Blends from Material Reality into Energy Scalars.", 130, 145, 10, WHITE);
+    DrawText("- 1.0 to 2.0: Blends from Energy into HAZARD (Detective) Vision.", 130, 160, 10, WHITE);
+    DrawText("- Hazard Vision highlights lethal physics (heat, crush, shock) and hostile NPCs.", 130, 175, 10, RED);
 
     DrawText("CONTROLS:", 120, 210, 15, SKYBLUE);
     DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [Mouse 1]: Hold to Cast", 130, 235, 10, WHITE);
     DrawText("- [SHIFT]: Toggle Cast Target (Ground vs Air)", 130, 250, 10, GREEN); 
     DrawText("- [ ` ]: Compiler   |   [ESC]: Guide", 130, 265, 10, WHITE);
-    DrawText("- [ TAB ]: Quick-Swap Vision  |  [ [ ] & [ ] ]: Fine-tune Blend", 130, 280, 10, PURPLE);
+    DrawText("- [ TAB ]: Quick-Swap Vision or Crafting Category", 130, 280, 10, PURPLE);
 }
