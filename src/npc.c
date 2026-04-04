@@ -14,7 +14,7 @@ void SpawnNPC(Vector2 pos, NPCDNA dna) {
             active_npcs[i].velocity = (Vector2){0,0};
             active_npcs[i].zVelocity = 0.0f;
             active_npcs[i].dna = dna;
-            active_npcs[i].health = 100.0f + (dna.mass * 2.0f);
+            active_npcs[i].health = 5.0f + (dna.mass * 1.0f); // VERY FRAGILE NOW
             active_npcs[i].animTime = GetRandomValue(0, 100) / 10.0f;
             active_npcs[i].active = true;
             break;
@@ -36,15 +36,12 @@ void UpdateNPCs(float dt, Player *p) {
             Cell c = grid[LAYER_GROUND][gy * WIDTH + gx];
             if (c.moisture > 40.0f && c.density > 20.0f && c.cohesion < 50.0f) inWater = true;
             
-            // NPC PHYSICS INTEGRATION
             if (n->z < 5.0f) {
                 if (c.temp > 60.0f) n->health -= (c.temp - 60.0f) * 0.5f * dt;
                 if (c.temp < -10.0f) n->health -= fabsf(c.temp + 10.0f) * 0.5f * dt;
                 float momentum = c.density * sqrtf(c.velocity.x*c.velocity.x + c.velocity.y*c.velocity.y);
-                
                 if (momentum > 50.0f) {
-                    n->health -= (momentum - 50.0f) * 0.1f * dt; // Pressure Damage
-                    // Kinetic Knockback!
+                    n->health -= (momentum - 50.0f) * 0.1f * dt; 
                     n->pos.x += c.velocity.x * (momentum / (n->dna.mass + 1.0f)) * dt;
                     n->pos.y += c.velocity.y * (momentum / (n->dna.mass + 1.0f)) * dt;
                 }
@@ -57,38 +54,25 @@ void UpdateNPCs(float dt, Player *p) {
 
         if (n->dna.intelligence > 20.0f) {
             if (distToPlayer < 300.0f) {
-                float dx = p->pos.x - n->pos.x;
-                float dy = p->pos.y - n->pos.y;
+                float dx = p->pos.x - n->pos.x; float dy = p->pos.y - n->pos.y;
                 float direction = (n->dna.hostility > 50.0f) ? 1.0f : -1.0f; 
-                targetDir.x = (dx / distToPlayer) * direction;
-                targetDir.y = (dy / distToPlayer) * direction;
+                targetDir.x = (dx / distToPlayer) * direction; targetDir.y = (dy / distToPlayer) * direction;
                 
                 if (n->dna.hostility > 50.0f && distToPlayer < 15.0f && p->z <= n->z + 10.0f) {
                     p->health -= (n->dna.mass * 0.1f) * dt;
                 }
             } else {
-                targetDir.x = sinf(n->animTime * (n->dna.intelligence / 50.0f));
-                targetDir.y = cosf(n->animTime * 0.5f);
+                targetDir.x = sinf(n->animTime * (n->dna.intelligence / 50.0f)); targetDir.y = cosf(n->animTime * 0.5f);
             }
         }
 
         float speed = 0.0f;
-        if (inWater) {
-            speed = n->dna.hydro * 1.5f;
-            if (n->dna.hydro > 50.0f) n->z = -10.0f - (n->dna.mass / 10.0f); 
-        } else if (n->z > 5.0f) {
-            speed = n->dna.aero * 2.0f;
-            n->z = 20.0f + sinf(n->animTime * 2.0f) * (n->dna.aero / 10.0f);
-        } else {
-            speed = n->dna.terrestrial * 1.2f;
-            n->z = 0.0f; 
-        }
+        if (inWater) { speed = n->dna.hydro * 1.5f; if (n->dna.hydro > 50.0f) n->z = -10.0f - (n->dna.mass / 10.0f); } 
+        else if (n->z > 5.0f) { speed = n->dna.aero * 2.0f; n->z = 20.0f + sinf(n->animTime * 2.0f) * (n->dna.aero / 10.0f); } 
+        else { speed = n->dna.terrestrial * 1.2f; n->z = 0.0f; }
 
-        n->velocity.x = targetDir.x * speed;
-        n->velocity.y = targetDir.y * speed;
-
-        n->pos.x += n->velocity.x * dt;
-        n->pos.y += n->velocity.y * dt;
+        n->velocity.x = targetDir.x * speed; n->velocity.y = targetDir.y * speed;
+        n->pos.x += n->velocity.x * dt; n->pos.y += n->velocity.y * dt;
 
         if (n->health <= 0) n->active = false;
     }
@@ -98,7 +82,6 @@ void DrawProceduralNPC(Vector2 pos, float z, NPCDNA dna, float alpha) {
     float scale = 3.0f + (dna.mass / 20.0f);
     float breathe = (sinf(GetTime() * 4.0f) + 1.0f) * 0.5f;
     Vector2 renderPos = { pos.x, pos.y - z };
-    
     Color baseCol = (dna.hostility > 50.0f) ? Fade(RED, alpha) : Fade(GREEN, alpha);
     
     if (z > 0) DrawEllipse(pos.x, pos.y, scale, scale/2, Fade(BLACK, 0.4f * alpha));
@@ -131,7 +114,7 @@ void DrawNPCs() {
     for(int i=0; i<50; i++) {
         if(active_npcs[i].active) {
             DrawProceduralNPC(active_npcs[i].pos, active_npcs[i].z, active_npcs[i].dna, 1.0f);
-            float hpPercent = active_npcs[i].health / (100.0f + (active_npcs[i].dna.mass * 2.0f));
+            float hpPercent = active_npcs[i].health / (5.0f + (active_npcs[i].dna.mass * 1.0f));
             DrawRectangle(active_npcs[i].pos.x - 10, active_npcs[i].pos.y - active_npcs[i].z - 15, 20, 2, RED);
             DrawRectangle(active_npcs[i].pos.x - 10, active_npcs[i].pos.y - active_npcs[i].z - 15, 20 * hpPercent, 2, GREEN);
         }
