@@ -2,9 +2,248 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
+#include <stdint.h>
+
+#define GRAPH_HISTORY_DEPTH 24
+
+typedef struct {
+    SigilGraph states[GRAPH_HISTORY_DEPTH];
+    int count;
+    int cursor;
+    bool initialized;
+    bool pending;
+    SigilGraph pendingState;
+    uint32_t pendingHash;
+} GraphHistoryState;
+
+static GraphHistoryState g_graphHistory[MAX_PLAYERS][10];
+static bool g_panModeByPlayer[MAX_PLAYERS];
+static SpellNode g_copiedNode;
+static bool g_hasCopiedNode = false;
+
+static int ClampPlayerIndex(int id) {
+    if (id < 0) return 0;
+    if (id >= MAX_PLAYERS) return MAX_PLAYERS - 1;
+    return id;
+}
+
+static int ClampHotbarIndex(int idx) {
+    if (idx < 0) return 0;
+    if (idx > 9) return 9;
+    return idx;
+}
+
+static int ClampNodeIndex(int idx) {
+    if (idx < 0) return 0;
+    if (idx >= MAX_NODES) return MAX_NODES - 1;
+    return idx;
+}
+
+static int FindFirstActiveNode(const SigilGraph *graph) {
+    if (!graph) return 0;
+    for (int i = 0; i < MAX_NODES; i++) {
+        if (graph->nodes[i].active) return i;
+    }
+    return 0;
+}
+
+static int FindFreeNode(const SigilGraph *graph) {
+    if (!graph) return -1;
+    for (int i = 1; i < MAX_NODES; i++) {
+        if (!graph->nodes[i].active) return i;
+    }
+    return -1;
+}
+
+static uint32_t HashBytesFNV1a(const void *data, size_t size) {
+    const unsigned char *bytes = (const unsigned char *)data;
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= (uint32_t)bytes[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static uint32_t HashSigilGraph(const SigilGraph *graph) {
+    return HashBytesFNV1a(graph, sizeof(*graph));
+}
+
+static void SanitizeSigilGraph(SigilGraph *graph) {
+    if (!graph) return;
+
+    if (!graph->nodes[0].active) {
+        InitDefaultSpellNode(&graph->nodes[0]);
+        graph->nodes[0].active = true;
+        graph->nodes[0].parentId = -1;
+        graph->nodes[0].pos = (Vector2){0.0f, 0.0f};
+    }
+    graph->nodes[0].parentId = -1;
+
+    for (int i = 1; i < MAX_NODES; i++) {
+        if (!graph->nodes[i].active) {
+            graph->nodes[i].parentId = -1;
+            continue;
+        }
+
+        int parentId = graph->nodes[i].parentId;
+        if (parentId < 0 || parentId >= MAX_NODES || parentId == i || !graph->nodes[parentId].active) {
+            graph->nodes[i].parentId = 0;
+        }
+
+        if (graph->nodes[i].sizeMod <= 0.01f) graph->nodes[i].sizeMod = 1.0f;
+        if (graph->nodes[i].rangeMod <= 0.01f) graph->nodes[i].rangeMod = 1.0f;
+        if (graph->nodes[i].speedMod <= 0.01f) graph->nodes[i].speedMod = 1.0f;
+        if (graph->nodes[i].toolRadius <= 0.1f) graph->nodes[i].toolRadius = 2.0f;
+    }
+}
+
+static int SanitizeSelectedNode(Player *p, SigilGraph *graph) {
+    if (!p || !graph) return 0;
+
+    SanitizeSigilGraph(graph);
+
+    if (p->selectedNodeId < 0 || p->selectedNodeId >= MAX_NODES) {
+        p->selectedNodeId = FindFirstActiveNode(graph);
+    }
+    if (!graph->nodes[p->selectedNodeId].active) {
+        p->selectedNodeId = FindFirstActiveNode(graph);
+    }
+    return ClampNodeIndex(p->selectedNodeId);
+}
+
+static void ResetGraphHistory(GraphHistoryState *history, const SigilGraph *graph) {
+    if (!history || !graph) return;
+    memset(history, 0, sizeof(*history));
+    history->states[0] = *graph;
+    history->count = 1;
+    history->cursor = 0;
+    history->initialized = true;
+}
+
+static void EnsureGraphHistory(GraphHistoryState *history, const SigilGraph *graph) {
+    if (!history || !graph) return;
+
+    if (!history->initialized || history->count <= 0 || history->cursor < 0 || history->cursor >= history->count) {
+        ResetGraphHistory(history, graph);
+        return;
+    }
+
+    if (!history->pending) {
+        uint32_t liveHash = HashSigilGraph(graph);
+        uint32_t cursorHash = HashSigilGraph(&history->states[history->cursor]);
+        if (liveHash != cursorHash) {
+            ResetGraphHistory(history, graph);
+        }
+    }
+}
+
+static void PushGraphHistoryState(GraphHistoryState *history, const SigilGraph *graph) {
+    if (!history || !graph) return;
+    if (!history->initialized) {
+        ResetGraphHistory(history, graph);
+        return;
+    }
+
+    uint32_t graphHash = HashSigilGraph(graph);
+    uint32_t cursorHash = HashSigilGraph(&history->states[history->cursor]);
+    if (graphHash == cursorHash) return;
+
+    if (history->cursor < history->count - 1) {
+        history->count = history->cursor + 1;
+    }
+
+    if (history->count >= GRAPH_HISTORY_DEPTH) {
+        memmove(&history->states[0], &history->states[1], sizeof(SigilGraph) * (GRAPH_HISTORY_DEPTH - 1));
+        history->count = GRAPH_HISTORY_DEPTH - 1;
+        history->cursor = history->count - 1;
+    }
+
+    history->states[history->count] = *graph;
+    history->count++;
+    history->cursor = history->count - 1;
+}
+
+static void QueueGraphHistoryCommit(GraphHistoryState *history, const SigilGraph *graph) {
+    if (!history || !graph) return;
+    history->pending = true;
+    history->pendingState = *graph;
+    history->pendingHash = HashSigilGraph(graph);
+}
+
+static void FlushGraphHistoryCommit(GraphHistoryState *history) {
+    if (!history || !history->pending) return;
+    PushGraphHistoryState(history, &history->pendingState);
+    history->pending = false;
+}
+
+static bool ApplyUndo(GraphHistoryState *history, SigilGraph *graph) {
+    if (!history || !graph) return false;
+    FlushGraphHistoryCommit(history);
+    if (!history->initialized || history->cursor <= 0) return false;
+    history->cursor--;
+    *graph = history->states[history->cursor];
+    history->pending = false;
+    return true;
+}
+
+static bool ApplyRedo(GraphHistoryState *history, SigilGraph *graph) {
+    if (!history || !graph) return false;
+    FlushGraphHistoryCommit(history);
+    if (!history->initialized || history->cursor >= history->count - 1) return false;
+    history->cursor++;
+    *graph = history->states[history->cursor];
+    history->pending = false;
+    return true;
+}
+
+static void RecenterGraphCamera(Player *p, const SigilGraph *graph) {
+    if (!p || !graph) return;
+
+    Vector2 accum = {0.0f, 0.0f};
+    int count = 0;
+    for (int i = 0; i < MAX_NODES; i++) {
+        if (!graph->nodes[i].active) continue;
+        accum.x += graph->nodes[i].pos.x;
+        accum.y += graph->nodes[i].pos.y;
+        count++;
+    }
+
+    if (count > 0) {
+        p->craftCamera.target = (Vector2){accum.x / count, accum.y / count};
+    } else {
+        p->craftCamera.target = (Vector2){0.0f, 0.0f};
+    }
+    p->craftCamera.zoom = 1.0f;
+}
+
+static bool InsertCopiedNode(SigilGraph *graph, int parentId, Vector2 pos, int *newId) {
+    if (!graph || !g_hasCopiedNode) return false;
+
+    int freeNode = FindFreeNode(graph);
+    if (freeNode < 0) return false;
+
+    SpellNode node = g_copiedNode;
+    node.active = true;
+    node.triggered = false;
+    node.parentId = ClampNodeIndex(parentId);
+    node.pos = pos;
+
+    graph->nodes[freeNode] = node;
+    if (newId) *newId = freeNode;
+    return true;
+}
+
 void DeleteNodeRec(SigilGraph *graph, int id) {
+    if (!graph) return;
+    if (id <= 0 || id >= MAX_NODES) return;
+    if (!graph->nodes[id].active) return;
+
     graph->nodes[id].active = false;
-    for(int i = 1; i < MAX_NODES; i++) if(graph->nodes[i].active && graph->nodes[i].parentId == id) DeleteNodeRec(graph, i);
+    graph->nodes[id].parentId = -1;
+    for (int i = 1; i < MAX_NODES; i++) {
+        if (graph->nodes[i].active && graph->nodes[i].parentId == id) DeleteNodeRec(graph, i);
+    }
 }
 
 void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float rot, float animOffset) {
@@ -102,10 +341,44 @@ Color GetCellColor(Cell c) {
     }
 }
 
-void DrawMaterialRealm(float alpha) {
+static void GetVisibleCellBounds(Camera2D camera, int *xMin, int *xMax, int *yMin, int *yMax) {
+    Vector2 a = GetScreenToWorld2D((Vector2){0.0f, 0.0f}, camera);
+    Vector2 b = GetScreenToWorld2D((Vector2){(float)SCREEN_W, 0.0f}, camera);
+    Vector2 c = GetScreenToWorld2D((Vector2){0.0f, (float)SCREEN_H}, camera);
+    Vector2 d = GetScreenToWorld2D((Vector2){(float)SCREEN_W, (float)SCREEN_H}, camera);
+
+    float wxMin = fminf(fminf(a.x, b.x), fminf(c.x, d.x));
+    float wxMax = fmaxf(fmaxf(a.x, b.x), fmaxf(c.x, d.x));
+    float wyMin = fminf(fminf(a.y, b.y), fminf(c.y, d.y));
+    float wyMax = fmaxf(fmaxf(a.y, b.y), fmaxf(c.y, d.y));
+
+    int margin = 3;
+    int cxMin = (int)floorf(wxMin / (float)PIXEL_SIZE) - margin;
+    int cxMax = (int)ceilf(wxMax / (float)PIXEL_SIZE) + margin;
+    int cyMin = (int)floorf(wyMin / (float)PIXEL_SIZE) - margin;
+    int cyMax = (int)ceilf(wyMax / (float)PIXEL_SIZE) + margin;
+
+    if (cxMin < 0) cxMin = 0;
+    if (cyMin < 0) cyMin = 0;
+    if (cxMax >= WIDTH) cxMax = WIDTH - 1;
+    if (cyMax >= HEIGHT) cyMax = HEIGHT - 1;
+
+    *xMin = cxMin;
+    *xMax = cxMax;
+    *yMin = cyMin;
+    *yMax = cyMax;
+}
+
+void DrawMaterialRealm(float alpha, Camera2D camera) {
     if (alpha <= 0.0f) return;
-    for (int y = 0; y < HEIGHT; y++) {
-        for (int x = 0; x < WIDTH; x++) {
+    int xMin = 0;
+    int xMax = WIDTH - 1;
+    int yMin = 0;
+    int yMax = HEIGHT - 1;
+    GetVisibleCellBounds(camera, &xMin, &xMax, &yMin, &yMax);
+
+    for (int y = yMin; y <= yMax; y++) {
+        for (int x = xMin; x <= xMax; x++) {
             Cell c = grid[LAYER_GROUND][y * WIDTH + x];
             Color color = Fade(GetCellColor(c), alpha); 
             if (color.a > 0) {
@@ -118,8 +391,8 @@ void DrawMaterialRealm(float alpha) {
             DrawChargeSparks(x, y, LAYER_GROUND, c.charge, c.density, alpha);
         }
     }
-    for (int y = 0; y < HEIGHT; y++) {
-        for (int x = 0; x < WIDTH; x++) {
+    for (int y = yMin; y <= yMax; y++) {
+        for (int x = xMin; x <= xMax; x++) {
             Cell airCell = grid[LAYER_AIR][y * WIDTH + x];
             if (airCell.density > 5.0f || airCell.temp > 40.0f) {
                 DrawRectangle(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE, Fade(BLACK, 0.4f * alpha)); 
@@ -131,11 +404,17 @@ void DrawMaterialRealm(float alpha) {
     }
 }
 
-void DrawEnergyRealm(float alpha) {
+void DrawEnergyRealm(float alpha, Camera2D camera) {
     if (alpha <= 0.0f) return;
+    int xMin = 0;
+    int xMax = WIDTH - 1;
+    int yMin = 0;
+    int yMax = HEIGHT - 1;
+    GetVisibleCellBounds(camera, &xMin, &xMax, &yMin, &yMax);
+
     for (int z = 0; z < 2; z++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int x = 0; x < WIDTH; x++) {
+        for (int y = yMin; y <= yMax; y++) {
+            for (int x = xMin; x <= xMax; x++) {
                 Cell c = grid[z][y * WIDTH + x];
                 if (c.density < 0.1f && fabsf(c.temp) < 0.1f && c.charge < 0.1f) continue;
                 unsigned char r = (unsigned char)fmin(255, fmax(0, c.temp * 10));
@@ -149,11 +428,17 @@ void DrawEnergyRealm(float alpha) {
     }
 }
 
-void DrawHazardRealm(float alpha) {
+void DrawHazardRealm(float alpha, Camera2D camera) {
     if (alpha <= 0.0f) return;
+    int xMin = 0;
+    int xMax = WIDTH - 1;
+    int yMin = 0;
+    int yMax = HEIGHT - 1;
+    GetVisibleCellBounds(camera, &xMin, &xMax, &yMin, &yMax);
+
     for (int z = 0; z < 2; z++) {
-        for (int y = 0; y < HEIGHT; y++) {
-            for (int x = 0; x < WIDTH; x++) {
+        for (int y = yMin; y <= yMax; y++) {
+            for (int x = xMin; x <= xMax; x++) {
                 Cell c = grid[z][y * WIDTH + x];
                 float heatHarm = fmaxf(0.0f, c.temp - 60.0f) / 50.0f; 
                 float coldHarm = fmaxf(0.0f, -10.0f - c.temp) / 50.0f;
@@ -302,6 +587,9 @@ static void DrawSpellCompendiumOverlay(void) {
 void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
     if (IsKeyPressed(KEY_F1)) p->showCompendium = !p->showCompendium;
 
+    p->activeSlot = ClampHotbarIndex(p->activeSlot);
+    int playerIndex = ClampPlayerIndex(p->id);
+
     DrawRectangle(10, 10, 200, 15, DARKGRAY);
     DrawRectangle(10, 10, (int)((fmax(0, p->health) / p->maxHealth) * 200), 15, RED);
     DrawRectangleLines(10, 10, 200, 15, WHITE);
@@ -362,31 +650,145 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
 
         if (p->craftCategory == 0) {
             SpellDNA *activeSpell = &p->hotbar[p->activeSlot].spell;
-            SigilGraph *activeGraph = &activeSpell->graph; 
-            Rectangle canvasBounds = {230, 60, 420, 340}; 
+            SigilGraph *activeGraph = &activeSpell->graph;
+            GraphHistoryState *history = &g_graphHistory[playerIndex][p->activeSlot];
+            bool *panMode = &g_panModeByPlayer[playerIndex];
+
+            Rectangle canvasBounds = {230, 88, 420, 312};
+            Rectangle toolbarBounds = {230, 60, 420, 24};
+
+            SanitizeSigilGraph(activeGraph);
+            int selectedId = SanitizeSelectedNode(p, activeGraph);
+            EnsureGraphHistory(history, activeGraph);
+
+            uint32_t graphHashBefore = HashSigilGraph(activeGraph);
+            bool graphMutated = false;
+
             DrawLine(220, 60, 220, 400, DARKGRAY);
             Rectangle leftPanel = {36, 60, 184, 332};
             DrawRectangleLinesEx(leftPanel, 1.0f, Fade(SKYBLUE, 0.35f));
             if (GuiButton((Rectangle){668, 372, 90, 20}, p->showCompendium ? "HIDE INFO" : "COMPEND")) p->showCompendium = !p->showCompendium;
 
+            bool typingValues = false;
+            for (int i = 0; i < 10; i++) {
+                if (p->editStates[i]) {
+                    typingValues = true;
+                    break;
+                }
+            }
+
+            bool keyCtrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+            bool keyShift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+
+            bool requestUndo = GuiButton((Rectangle){234, 62, 44, 20}, "UNDO");
+            bool requestRedo = GuiButton((Rectangle){280, 62, 44, 20}, "REDO");
+            bool requestCopy = GuiButton((Rectangle){326, 62, 44, 20}, "COPY");
+            bool requestPaste = GuiButton((Rectangle){372, 62, 44, 20}, "PASTE");
+            bool requestDelete = GuiButton((Rectangle){418, 62, 44, 20}, "DEL");
+            bool requestErase = GuiButton((Rectangle){464, 62, 44, 20}, "ERASE");
+            bool requestAdd = GuiButton((Rectangle){510, 62, 44, 20}, "ADD");
+            bool requestCenter = GuiButton((Rectangle){556, 62, 44, 20}, "CENTER");
+            bool requestMoveToggle = GuiButton((Rectangle){602, 62, 44, 20}, *panMode ? "MOVE*" : "MOVE");
+
+            if (!typingValues) {
+                if (keyCtrl && IsKeyPressed(KEY_Z) && !keyShift) requestUndo = true;
+                if ((keyCtrl && IsKeyPressed(KEY_Y)) || (keyCtrl && keyShift && IsKeyPressed(KEY_Z))) requestRedo = true;
+                if (keyCtrl && IsKeyPressed(KEY_C)) requestCopy = true;
+                if (keyCtrl && IsKeyPressed(KEY_V)) requestPaste = true;
+                if (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_BACKSPACE)) requestDelete = true;
+                if (IsKeyPressed(KEY_N)) requestAdd = true;
+                if (IsKeyPressed(KEY_R)) requestCenter = true;
+                if (IsKeyPressed(KEY_M)) requestMoveToggle = true;
+            }
+
+            if (requestMoveToggle) *panMode = !(*panMode);
+
+            if (requestUndo) {
+                if (ApplyUndo(history, activeGraph)) {
+                    selectedId = SanitizeSelectedNode(p, activeGraph);
+                    graphMutated = true;
+                }
+            }
+
+            if (requestRedo) {
+                if (ApplyRedo(history, activeGraph)) {
+                    selectedId = SanitizeSelectedNode(p, activeGraph);
+                    graphMutated = true;
+                }
+            }
+
+            if (requestCopy && selectedId >= 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                g_copiedNode = activeGraph->nodes[selectedId];
+                g_hasCopiedNode = true;
+            }
+
+            if (requestPaste && g_hasCopiedNode && selectedId >= 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                Vector2 pastePos = activeGraph->nodes[selectedId].pos;
+                pastePos.x += 40.0f;
+                int newId = -1;
+                if (InsertCopiedNode(activeGraph, selectedId, pastePos, &newId)) {
+                    p->selectedNodeId = newId;
+                    selectedId = newId;
+                    graphMutated = true;
+                }
+            }
+
+            if (requestDelete && selectedId > 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                DeleteNodeRec(activeGraph, selectedId);
+                selectedId = SanitizeSelectedNode(p, activeGraph);
+                graphMutated = true;
+            }
+
+            if (requestErase) {
+                for (int i = 1; i < MAX_NODES; i++) {
+                    activeGraph->nodes[i].active = false;
+                    activeGraph->nodes[i].parentId = -1;
+                }
+                selectedId = SanitizeSelectedNode(p, activeGraph);
+                graphMutated = true;
+            }
+
+            if (requestAdd && selectedId >= 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                int freeId = FindFreeNode(activeGraph);
+                if (freeId != -1) {
+                    InitDefaultSpellNode(&activeGraph->nodes[freeId]);
+                    activeGraph->nodes[freeId].active = true;
+                    activeGraph->nodes[freeId].parentId = selectedId;
+                    activeGraph->nodes[freeId].pos = GetScreenToWorld2D(
+                        (Vector2){canvasBounds.x + canvasBounds.width * 0.5f, canvasBounds.y + canvasBounds.height * 0.5f},
+                        p->craftCamera);
+                    p->selectedNodeId = freeId;
+                    selectedId = freeId;
+                    graphMutated = true;
+                }
+            }
+
+            if (requestCenter) {
+                RecenterGraphCamera(p, activeGraph);
+            }
+
+            DrawRectangleLinesEx(toolbarBounds, 1.0f, Fade(*panMode ? GOLD : SKYBLUE, 0.6f));
+            DrawText(*panMode ? "PAN MODE ACTIVE" : "EDIT MODE", 234, 84, 10, *panMode ? GOLD : LIGHTGRAY);
+            DrawText("Shortcuts: Ctrl+Z/Y  Ctrl+C/V  Del  N  R  M", 380, 84, 10, GRAY);
+
             BeginScissorMode((int)leftPanel.x, (int)leftPanel.y, (int)leftPanel.width, (int)leftPanel.height);
             DrawText("SCALARS & BEHAVIOR", 40, 65, 12, GOLD);
-            if (p->selectedNodeId != -1 && activeGraph->nodes[p->selectedNodeId].active) {
-                SpellNode *n = &activeGraph->nodes[p->selectedNodeId];
-                DrawText(TextFormat("ID: %d", p->selectedNodeId), 40, 80, 10, SKYBLUE);
+            if (selectedId >= 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                SpellNode *n = &activeGraph->nodes[selectedId];
+                DrawText(TextFormat("ID: %d", selectedId), 40, 80, 10, SKYBLUE);
 
                 int ySp = 95;
                 GuiSlider((Rectangle){80, ySp, 78, 10}, "TEMP", NULL, &n->temp, -100, 200);
-                int tV = (int)n->temp; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &tV, -100, 200, p->editStates[0])) p->editStates[0] = !p->editStates[0]; n->temp = tV; ySp+=18;
+                int tV = (int)n->temp; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &tV, -100, 200, p->editStates[0])) p->editStates[0] = !p->editStates[0]; n->temp = tV; ySp += 18;
 
                 GuiSlider((Rectangle){80, ySp, 78, 10}, "MASS", NULL, &n->density, 0, 100);
-                int mV = (int)n->density; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp+=18;
+                int mV = (int)n->density; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp += 18;
 
                 GuiSlider((Rectangle){80, ySp, 78, 10}, "COHE", NULL, &n->cohesion, -200, 200);
-                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &cV, -200, 200, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
+                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &cV, -200, 200, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp += 18;
 
                 GuiSlider((Rectangle){80, ySp, 78, 10}, "WET", NULL, &n->moisture, 0, 100);
-                int wV = (int)n->moisture; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp+=18;
+                int wV = (int)n->moisture; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp += 18;
 
                 GuiSlider((Rectangle){80, ySp, 78, 10}, "CHRG", NULL, &n->charge, 0, 100);
                 int hV = (int)n->charge; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &hV, 0, 100, p->editStates[4])) p->editStates[4] = !p->editStates[4]; n->charge = hV;
@@ -402,52 +804,52 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                 GuiToggle((Rectangle){185, 205, 26, 15}, "SIZ", &n->hasSize);
 
                 int gY = 225;
-                if(n->hasSpeed) {
-                    GuiSlider((Rectangle){80, gY, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f); gY+=15;
-                    GuiSlider((Rectangle){80, gY, 120, 10}, "EASE", NULL, &n->easeTime, 0.0f, 3.0f); gY+=15;
+                if (n->hasSpeed) {
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f); gY += 15;
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "EASE", NULL, &n->easeTime, 0.0f, 3.0f); gY += 15;
                 }
-                if(n->hasDelay) { GuiSlider((Rectangle){80, gY, 120, 10}, "DELAY", NULL, &n->delay, 0.0f, 5.0f); gY+=15; }
-                if(n->hasDistort) { GuiSlider((Rectangle){80, gY, 120, 10}, "DSTRT", NULL, &n->distortion, 0.0f, 100.0f); gY+=15; }
-                if(n->hasRange) { GuiSlider((Rectangle){80, gY, 120, 10}, "RANGE", NULL, &n->rangeMod, 0.1f, 5.0f); gY+=15; }
-                if(n->hasSize) { GuiSlider((Rectangle){80, gY, 120, 10}, "SIZE", NULL, &n->sizeMod, 0.1f, 5.0f); gY+=15; }
+                if (n->hasDelay) { GuiSlider((Rectangle){80, gY, 120, 10}, "DELAY", NULL, &n->delay, 0.0f, 5.0f); gY += 15; }
+                if (n->hasDistort) { GuiSlider((Rectangle){80, gY, 120, 10}, "DSTRT", NULL, &n->distortion, 0.0f, 100.0f); gY += 15; }
+                if (n->hasRange) { GuiSlider((Rectangle){80, gY, 120, 10}, "RANGE", NULL, &n->rangeMod, 0.1f, 5.0f); gY += 15; }
+                if (n->hasSize) { GuiSlider((Rectangle){80, gY, 120, 10}, "SIZE", NULL, &n->sizeMod, 0.1f, 5.0f); gY += 15; }
 
-                if(n->hasSpread) {
+                if (n->hasSpread) {
                     DrawText("SPREAD TYPE:", 40, gY, 10, WHITE);
-                    if(GuiButton((Rectangle){40, gY+10, 42, 15}, "OFF")) n->spreadType = SPREAD_OFF;
-                    if(GuiButton((Rectangle){86, gY+10, 42, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
-                    if(GuiButton((Rectangle){132, gY+10, 42, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
+                    if (GuiButton((Rectangle){40, gY + 10, 42, 15}, "OFF")) n->spreadType = SPREAD_OFF;
+                    if (GuiButton((Rectangle){86, gY + 10, 42, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
+                    if (GuiButton((Rectangle){132, gY + 10, 42, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
                     int sx = (n->spreadType == SPREAD_OFF) ? 40 : (n->spreadType == SPREAD_INSTANT) ? 86 : 132;
-                    DrawRectangleLines(sx, gY+10, 42, 15, PURPLE);
+                    DrawRectangleLines(sx, gY + 10, 42, 15, PURPLE);
                     gY += 30;
                 }
 
                 DrawText("COND:", 40, gY, 10, WHITE);
-                if(GuiButton((Rectangle){40, gY, 40, 15}, "ALW")) n->conditionType = COND_ALWAYS;
-                if(GuiButton((Rectangle){84, gY, 40, 15}, "T>")) n->conditionType = COND_FLIGHT_TIME_GT;
-                if(GuiButton((Rectangle){128, gY, 40, 15}, "S>")) n->conditionType = COND_SCALAR_GT;
-                if(GuiButton((Rectangle){172, gY, 40, 15}, "S<")) n->conditionType = COND_SCALAR_LT;
+                if (GuiButton((Rectangle){40, gY, 40, 15}, "ALW")) n->conditionType = COND_ALWAYS;
+                if (GuiButton((Rectangle){84, gY, 40, 15}, "T>")) n->conditionType = COND_FLIGHT_TIME_GT;
+                if (GuiButton((Rectangle){128, gY, 40, 15}, "S>")) n->conditionType = COND_SCALAR_GT;
+                if (GuiButton((Rectangle){172, gY, 40, 15}, "S<")) n->conditionType = COND_SCALAR_LT;
                 int csel = (n->conditionType == COND_ALWAYS) ? 40 :
                            (n->conditionType == COND_FLIGHT_TIME_GT) ? 84 :
                            (n->conditionType == COND_SCALAR_GT) ? 128 : 172;
                 DrawRectangleLines(csel, gY, 40, 15, GOLD);
                 gY += 18;
 
-                if(n->conditionType != COND_ALWAYS) {
-                    if(n->conditionType == COND_FLIGHT_TIME_GT) {
+                if (n->conditionType != COND_ALWAYS) {
+                    if (n->conditionType == COND_FLIGHT_TIME_GT) {
                         GuiSlider((Rectangle){80, gY, 120, 10}, "TIME", NULL, &n->conditionThreshold, 0.0f, 8.0f);
                         gY += 15;
                     } else {
                         DrawText("CH:", 40, gY, 10, WHITE);
-                        if(GuiButton((Rectangle){40, gY+10, 30, 14}, "TMP")) n->conditionChannel = SCALAR_TEMP;
-                        if(GuiButton((Rectangle){74, gY+10, 30, 14}, "MAS")) n->conditionChannel = SCALAR_DENSITY;
-                        if(GuiButton((Rectangle){108, gY+10, 30, 14}, "WET")) n->conditionChannel = SCALAR_MOISTURE;
-                        if(GuiButton((Rectangle){142, gY+10, 30, 14}, "COH")) n->conditionChannel = SCALAR_COHESION;
-                        if(GuiButton((Rectangle){176, gY+10, 30, 14}, "CHG")) n->conditionChannel = SCALAR_CHARGE;
+                        if (GuiButton((Rectangle){40, gY + 10, 30, 14}, "TMP")) n->conditionChannel = SCALAR_TEMP;
+                        if (GuiButton((Rectangle){74, gY + 10, 30, 14}, "MAS")) n->conditionChannel = SCALAR_DENSITY;
+                        if (GuiButton((Rectangle){108, gY + 10, 30, 14}, "WET")) n->conditionChannel = SCALAR_MOISTURE;
+                        if (GuiButton((Rectangle){142, gY + 10, 30, 14}, "COH")) n->conditionChannel = SCALAR_COHESION;
+                        if (GuiButton((Rectangle){176, gY + 10, 30, 14}, "CHG")) n->conditionChannel = SCALAR_CHARGE;
                         int clampedCh = n->conditionChannel;
                         if (clampedCh < 0) clampedCh = 0;
                         if (clampedCh >= SCALAR_COUNT) clampedCh = SCALAR_COUNT - 1;
                         int cx = 40 + (clampedCh * 34);
-                        DrawRectangleLines(cx, gY+10, 30, 14, SKYBLUE);
+                        DrawRectangleLines(cx, gY + 10, 30, 14, SKYBLUE);
                         gY += 26;
                         GuiSlider((Rectangle){80, gY, 120, 10}, "THR", NULL, &n->conditionThreshold, -250.0f, 350.0f);
                         gY += 15;
@@ -458,17 +860,17 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
 
                 GuiToggle((Rectangle){40, gY, 85, 15}, "TOOL", &n->hasTool);
                 gY += 18;
-                if(n->hasTool) {
+                if (n->hasTool) {
                     DrawText("TOOL:", 40, gY, 10, WHITE);
-                    if(GuiButton((Rectangle){40, gY+10, 30, 14}, "BLD")) n->toolType = TOOL_BUILD;
-                    if(GuiButton((Rectangle){74, gY+10, 30, 14}, "DIG")) n->toolType = TOOL_DIG;
-                    if(GuiButton((Rectangle){108, gY+10, 30, 14}, "WET")) n->toolType = TOOL_MOISTEN;
-                    if(GuiButton((Rectangle){142, gY+10, 30, 14}, "DRY")) n->toolType = TOOL_DRY;
-                    if(GuiButton((Rectangle){40, gY+26, 30, 14}, "HOT")) n->toolType = TOOL_HEAT;
-                    if(GuiButton((Rectangle){74, gY+26, 30, 14}, "COO")) n->toolType = TOOL_COOL;
-                    if(GuiButton((Rectangle){108, gY+26, 30, 14}, "CON")) n->toolType = TOOL_CONDUCT;
-                    if(GuiButton((Rectangle){142, gY+26, 30, 14}, "BHO")) n->toolType = TOOL_SINGULARITY_BLACK;
-                    if(GuiButton((Rectangle){176, gY+26, 30, 14}, "WHO")) n->toolType = TOOL_SINGULARITY_WHITE;
+                    if (GuiButton((Rectangle){40, gY + 10, 30, 14}, "BLD")) n->toolType = TOOL_BUILD;
+                    if (GuiButton((Rectangle){74, gY + 10, 30, 14}, "DIG")) n->toolType = TOOL_DIG;
+                    if (GuiButton((Rectangle){108, gY + 10, 30, 14}, "WET")) n->toolType = TOOL_MOISTEN;
+                    if (GuiButton((Rectangle){142, gY + 10, 30, 14}, "DRY")) n->toolType = TOOL_DRY;
+                    if (GuiButton((Rectangle){40, gY + 26, 30, 14}, "HOT")) n->toolType = TOOL_HEAT;
+                    if (GuiButton((Rectangle){74, gY + 26, 30, 14}, "COO")) n->toolType = TOOL_COOL;
+                    if (GuiButton((Rectangle){108, gY + 26, 30, 14}, "CON")) n->toolType = TOOL_CONDUCT;
+                    if (GuiButton((Rectangle){142, gY + 26, 30, 14}, "BHO")) n->toolType = TOOL_SINGULARITY_BLACK;
+                    if (GuiButton((Rectangle){176, gY + 26, 30, 14}, "WHO")) n->toolType = TOOL_SINGULARITY_WHITE;
                     gY += 45;
                     GuiSlider((Rectangle){80, gY, 120, 10}, "PWR", NULL, &n->toolPower, 0.5f, 5.0f); gY += 15;
                     GuiSlider((Rectangle){80, gY, 120, 10}, "RAD", NULL, &n->toolRadius, 1.0f, 12.0f); gY += 15;
@@ -477,29 +879,29 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
 
                 int moveY = (gY > 345) ? gY : 345;
                 DrawText("MOVE:", 40, moveY, 10, WHITE);
-                if(GuiButton((Rectangle){40, moveY + 10, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
-                if(GuiButton((Rectangle){80, moveY + 10, 35, 15}, "SIN")) n->movement = MOVE_SIN;
-                if(GuiButton((Rectangle){120, moveY + 10, 35, 15}, "COS")) n->movement = MOVE_COS;
-                if(GuiButton((Rectangle){160, moveY + 10, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
+                if (GuiButton((Rectangle){40, moveY + 10, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
+                if (GuiButton((Rectangle){80, moveY + 10, 35, 15}, "SIN")) n->movement = MOVE_SIN;
+                if (GuiButton((Rectangle){120, moveY + 10, 35, 15}, "COS")) n->movement = MOVE_COS;
+                if (GuiButton((Rectangle){160, moveY + 10, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
                 int mx = (n->movement == MOVE_STRAIGHT) ? 40 : (n->movement == MOVE_SIN) ? 80 : (n->movement == MOVE_COS) ? 120 : 160;
                 DrawRectangleLines(mx, moveY + 10, 35, 15, GREEN);
             }
             EndScissorMode();
 
             DrawText("GLOBAL FORM:", 40, 395, 10, WHITE);
-            if(GuiButton((Rectangle){110, 395, 30, 15}, "PRJ")) activeSpell->form = FORM_PROJECTILE;
-            if(GuiButton((Rectangle){145, 395, 30, 15}, "MNS")) activeSpell->form = FORM_MANIFEST;
-            if(GuiButton((Rectangle){180, 395, 30, 15}, "AUR")) activeSpell->form = FORM_AURA;
+            if (GuiButton((Rectangle){110, 395, 30, 15}, "PRJ")) activeSpell->form = FORM_PROJECTILE;
+            if (GuiButton((Rectangle){145, 395, 30, 15}, "MNS")) activeSpell->form = FORM_MANIFEST;
+            if (GuiButton((Rectangle){180, 395, 30, 15}, "AUR")) activeSpell->form = FORM_AURA;
             int fx = (activeSpell->form == 0) ? 110 : (activeSpell->form == 1) ? 145 : 180;
             DrawRectangleLines(fx, 395, 30, 15, PURPLE);
 
             DrawLine(660, 60, 660, 400, DARKGRAY);
             DrawText("ANALYSIS", 670, 70, 12, GOLD);
 
-            float maxTime = 1.5f; 
-            for(int i=0; i<MAX_NODES; i++) {
-                if(activeGraph->nodes[i].active && activeGraph->nodes[i].hasDelay) {
-                    if(activeGraph->nodes[i].delay + 1.5f > maxTime) maxTime = activeGraph->nodes[i].delay + 1.5f;
+            float maxTime = 1.5f;
+            for (int i = 0; i < MAX_NODES; i++) {
+                if (activeGraph->nodes[i].active && activeGraph->nodes[i].hasDelay) {
+                    if (activeGraph->nodes[i].delay + 1.5f > maxTime) maxTime = activeGraph->nodes[i].delay + 1.5f;
                 }
             }
             DrawText(TextFormat("MAX TIME: %.1fs", maxTime), 670, 100, 10, RAYWHITE);
@@ -508,76 +910,113 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
             DrawText("INFINITE COMPILER CANVAS", 260, 65, 15, GOLD);
             if (CheckCollisionPointRec(virtualMouse, canvasBounds)) {
                 p->craftCamera.zoom += GetMouseWheelMove() * 0.1f;
-                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                if (p->craftCamera.zoom < 0.35f) p->craftCamera.zoom = 0.35f;
+                if (p->craftCamera.zoom > 2.5f) p->craftCamera.zoom = 2.5f;
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE) || (*panMode && IsMouseButtonDown(MOUSE_BUTTON_LEFT))) {
                     Vector2 delta = GetMouseDelta();
-                    p->craftCamera.target.x -= delta.x / p->craftCamera.zoom;
-                    p->craftCamera.target.y -= delta.y / p->craftCamera.zoom;
+                    float zoom = fmaxf(0.05f, p->craftCamera.zoom);
+                    p->craftCamera.target.x -= delta.x / zoom;
+                    p->craftCamera.target.y -= delta.y / zoom;
                 }
-                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                    Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
-                    int clickedId = -1;
-                    for(int i=0; i<MAX_NODES; i++) {
-                        if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
-                            clickedId = i; break;
+
+                if (!(*panMode)) {
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                        Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
+                        int clickedId = -1;
+                        for (int i = 0; i < MAX_NODES; i++) {
+                            if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
+                                clickedId = i;
+                                break;
+                            }
                         }
-                    }
-                    if (clickedId != -1) { p->selectedNodeId = clickedId; p->draggingNodeId = clickedId; } 
-                    else if (p->selectedNodeId != -1) {
-                        for(int i=0; i<MAX_NODES; i++) {
-                            if (!activeGraph->nodes[i].active) {
-                                InitDefaultSpellNode(&activeGraph->nodes[i]);
-                                activeGraph->nodes[i].active = true;
-                                activeGraph->nodes[i].parentId = p->selectedNodeId;
-                                activeGraph->nodes[i].pos = worldMouse;
-                                p->selectedNodeId = i; break;
+
+                        if (clickedId != -1) {
+                            p->selectedNodeId = clickedId;
+                            p->draggingNodeId = clickedId;
+                        } else if (selectedId >= 0 && selectedId < MAX_NODES && activeGraph->nodes[selectedId].active) {
+                            int freeId = FindFreeNode(activeGraph);
+                            if (freeId != -1) {
+                                InitDefaultSpellNode(&activeGraph->nodes[freeId]);
+                                activeGraph->nodes[freeId].active = true;
+                                activeGraph->nodes[freeId].parentId = selectedId;
+                                activeGraph->nodes[freeId].pos = worldMouse;
+                                p->selectedNodeId = freeId;
+                                selectedId = freeId;
+                                graphMutated = true;
                             }
                         }
                     }
-                }
-                if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && p->draggingNodeId != -1) {
-                    activeGraph->nodes[p->draggingNodeId].pos = GetScreenToWorld2D(virtualMouse, p->craftCamera);
-                }
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->draggingNodeId = -1;
 
-                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                    Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
-                    for(int i=1; i<MAX_NODES; i++) { 
-                        if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
-                            DeleteNodeRec(activeGraph, i); 
-                            if (!activeGraph->nodes[p->selectedNodeId].active) p->selectedNodeId = 0;
-                            break; 
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && p->draggingNodeId != -1) {
+                        int dragId = ClampNodeIndex(p->draggingNodeId);
+                        if (activeGraph->nodes[dragId].active) {
+                            activeGraph->nodes[dragId].pos = GetScreenToWorld2D(virtualMouse, p->craftCamera);
+                            graphMutated = true;
+                        } else {
+                            p->draggingNodeId = -1;
                         }
                     }
+
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->draggingNodeId = -1;
+
+                    if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                        Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
+                        for (int i = 1; i < MAX_NODES; i++) {
+                            if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
+                                DeleteNodeRec(activeGraph, i);
+                                selectedId = SanitizeSelectedNode(p, activeGraph);
+                                graphMutated = true;
+                                break;
+                            }
+                        }
+                    }
+                } else if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                    p->draggingNodeId = -1;
                 }
             }
 
-            BeginScissorMode(canvasBounds.x, canvasBounds.y, canvasBounds.width, canvasBounds.height);
+            selectedId = SanitizeSelectedNode(p, activeGraph);
+
+            BeginScissorMode((int)canvasBounds.x, (int)canvasBounds.y, (int)canvasBounds.width, (int)canvasBounds.height);
             BeginMode2D(p->craftCamera);
-                for(int i=-1000; i<1000; i+=50) {
-                    DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f)); DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
+                for (int i = -1000; i < 1000; i += 50) {
+                    DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f));
+                    DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
                 }
-                for(int i=0; i<MAX_NODES; i++) {
+
+                for (int i = 0; i < MAX_NODES; i++) {
                     if (!activeGraph->nodes[i].active || activeGraph->nodes[i].parentId == -1) continue;
-                    
+
                     int pId = activeGraph->nodes[i].parentId;
                     if (pId >= 0 && pId < MAX_NODES && activeGraph->nodes[pId].active) {
                         Vector2 parentPos = activeGraph->nodes[pId].pos;
                         DrawLineEx(parentPos, activeGraph->nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
-                        
-                        Vector2 mid = { (parentPos.x + activeGraph->nodes[i].pos.x)/2, (parentPos.y + activeGraph->nodes[i].pos.y)/2 };
-                        if (activeGraph->nodes[i].hasDelay) DrawText(TextFormat("%.1fs", activeGraph->nodes[i].delay), mid.x-10, mid.y-10, 10, RAYWHITE);
-                        if (activeGraph->nodes[i].hasSpeed) DrawCircle(mid.x, mid.y+5, 2.0f, GOLD); 
+
+                        Vector2 mid = {(parentPos.x + activeGraph->nodes[i].pos.x) / 2, (parentPos.y + activeGraph->nodes[i].pos.y) / 2};
+                        if (activeGraph->nodes[i].hasDelay) DrawText(TextFormat("%.1fs", activeGraph->nodes[i].delay), mid.x - 10, mid.y - 10, 10, RAYWHITE);
+                        if (activeGraph->nodes[i].hasSpeed) DrawCircle(mid.x, mid.y + 5, 2.0f, GOLD);
                         DrawCircleV(mid, 3.0f, RAYWHITE);
                     }
                 }
-                for(int i=0; i<MAX_NODES; i++) {
+
+                for (int i = 0; i < MAX_NODES; i++) {
                     if (!activeGraph->nodes[i].active) continue;
-                    Color ringColor = (i == p->selectedNodeId) ? GOLD : RAYWHITE;
-                    if (i == 0) DrawCircleLines(activeGraph->nodes[i].pos.x, activeGraph->nodes[i].pos.y, 25.0f, PURPLE); 
+                    Color ringColor = (i == selectedId) ? GOLD : RAYWHITE;
+                    if (i == 0) DrawCircleLines(activeGraph->nodes[i].pos.x, activeGraph->nodes[i].pos.y, 25.0f, PURPLE);
                     DrawCircleLines(activeGraph->nodes[i].pos.x, activeGraph->nodes[i].pos.y, 18.0f, ringColor);
                     DrawNodeSigil(activeGraph->nodes[i].pos, activeGraph->nodes[i], 8.0f, GetTime());
                 }
             EndMode2D(); EndScissorMode();
+
+            uint32_t graphHashAfter = HashSigilGraph(activeGraph);
+            if (graphMutated || graphHashAfter != graphHashBefore) {
+                QueueGraphHistoryCommit(history, activeGraph);
+            }
+
+            if (history->pending && !IsMouseButtonDown(MOUSE_BUTTON_LEFT) && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+                FlushGraphHistoryCommit(history);
+            }
 
         } else if (p->craftCategory == 1) {
             DrawText("ARTIFICIAL SUPER INTEL (ASI)", 70, 70, 15, GREEN);

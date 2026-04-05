@@ -3,35 +3,36 @@ plugins {
 }
 
 android {
-    namespace 'com.magicii.dummy'
-    compileSdk 35
+    namespace = 'com.magicii.dummy'
+    compileSdk = 35
+    ndkVersion = '28.2.13676358'
 
     defaultConfig {
-        applicationId "com.magicii.dummy"
-        minSdk 24
-        targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        applicationId = "com.magicii.dummy"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
 
         ndk {
-            abiFilters 'arm64-v8a'
+            abiFilters += ['arm64-v8a']
         }
     }
 
     buildTypes {
         debug {
-            debuggable true
+            debuggable = true
         }
 
         release {
-            minifyEnabled false
+            minifyEnabled = false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
     packaging {
         jniLibs {
-            useLegacyPackaging true
+            useLegacyPackaging = true
         }
     }
 }

@@ -1,7 +1,7 @@
 {
   "version": 3,
   "artifactType": {
-    "type": "PROCESSED_RES",
+    "type": "LINKED_RESOURCES_BINARY_FORMAT",
     "kind": "Directory"
   },
   "applicationId": "com.magicii.dummy",
@@ -13,7 +13,7 @@
       "attributes": [],
       "versionCode": 1,
       "versionName": "1.0",
-      "outputFile": "resources-debug.ap_"
+      "outputFile": "linked-resources-binary-format-debug.ap_"
     }
   ],
   "elementType": "File"

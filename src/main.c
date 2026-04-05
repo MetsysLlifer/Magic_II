@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <arpa/inet.h>
@@ -178,6 +179,61 @@ static int ClampSlotIndex(int slot) {
     if (slot < 0) return 0;
     if (slot > 9) return 9;
     return slot;
+}
+
+static int ClampSpellFormValue(int form) {
+    if (form < FORM_PROJECTILE) return FORM_PROJECTILE;
+    if (form > FORM_BEAM) return FORM_BEAM;
+    return form;
+}
+
+static void SanitizeSigilGraphData(SigilGraph *graph) {
+    if (!graph) return;
+
+    if (!graph->nodes[0].active) {
+        InitDefaultSpellNode(&graph->nodes[0]);
+        graph->nodes[0].active = true;
+        graph->nodes[0].pos = (Vector2){0.0f, 0.0f};
+    }
+    graph->nodes[0].parentId = -1;
+
+    for (int i = 1; i < MAX_NODES; i++) {
+        if (!graph->nodes[i].active) {
+            graph->nodes[i].parentId = -1;
+            continue;
+        }
+
+        int parentId = graph->nodes[i].parentId;
+        if (parentId < 0 || parentId >= MAX_NODES || parentId == i || !graph->nodes[parentId].active) {
+            graph->nodes[i].parentId = 0;
+        }
+
+        if (graph->nodes[i].sizeMod <= 0.01f) graph->nodes[i].sizeMod = 1.0f;
+        if (graph->nodes[i].rangeMod <= 0.01f) graph->nodes[i].rangeMod = 1.0f;
+        if (graph->nodes[i].speedMod <= 0.01f) graph->nodes[i].speedMod = 1.0f;
+        if (graph->nodes[i].toolRadius <= 0.1f) graph->nodes[i].toolRadius = 2.0f;
+    }
+}
+
+static void SanitizeHotbarSlot(HotbarSlot *slot) {
+    if (!slot) return;
+
+    if (slot->type != ITEM_SPELL && slot->type != ITEM_NPC) slot->type = ITEM_SPELL;
+    if (slot->type == ITEM_SPELL) {
+        slot->spell.form = ClampSpellFormValue(slot->spell.form);
+        SanitizeSigilGraphData(&slot->spell.graph);
+    }
+}
+
+static void SanitizePlayerLoadout(Player *p) {
+    if (!p) return;
+
+    p->activeSlot = ClampSlotIndex(p->activeSlot);
+    if (p->castLayer != LAYER_GROUND && p->castLayer != LAYER_AIR) p->castLayer = LAYER_GROUND;
+
+    for (int i = 0; i < 10; i++) {
+        SanitizeHotbarSlot(&p->hotbar[i]);
+    }
 }
 
 static void SeedHotbarHashes(const Player *p, uint32_t hashes[10]) {
@@ -430,13 +486,19 @@ static bool SavePlayerProfile(const char *path, const Player *p) {
     FILE *fp = fopen(path, "wb");
     if (!fp) return false;
 
-    PlayerProfileBlob blob;
-    memset(&blob, 0, sizeof(blob));
-    blob.magic = PROFILE_MAGIC;
-    blob.version = PROFILE_VERSION;
-    blob.player = *p;
+    PlayerProfileBlob *blob = (PlayerProfileBlob *)malloc(sizeof(*blob));
+    if (!blob) {
+        fclose(fp);
+        return false;
+    }
 
-    bool ok = (fwrite(&blob, sizeof(blob), 1, fp) == 1);
+    memset(blob, 0, sizeof(*blob));
+    blob->magic = PROFILE_MAGIC;
+    blob->version = PROFILE_VERSION;
+    blob->player = *p;
+
+    bool ok = (fwrite(blob, sizeof(*blob), 1, fp) == 1);
+    free(blob);
     fclose(fp);
     return ok;
 }
@@ -447,14 +509,26 @@ static bool LoadPlayerProfile(const char *path, Player *p) {
     FILE *fp = fopen(path, "rb");
     if (!fp) return false;
 
-    PlayerProfileBlob blob;
-    bool ok = (fread(&blob, sizeof(blob), 1, fp) == 1);
+    PlayerProfileBlob *blob = (PlayerProfileBlob *)malloc(sizeof(*blob));
+    if (!blob) {
+        fclose(fp);
+        return false;
+    }
+
+    bool ok = (fread(blob, sizeof(*blob), 1, fp) == 1);
     fclose(fp);
 
-    if (!ok) return false;
-    if (blob.magic != PROFILE_MAGIC || blob.version != PROFILE_VERSION) return false;
+    if (!ok) {
+        free(blob);
+        return false;
+    }
+    if (blob->magic != PROFILE_MAGIC || blob->version != PROFILE_VERSION) {
+        free(blob);
+        return false;
+    }
 
-    *p = blob.player;
+    *p = blob->player;
+    free(blob);
     return true;
 }
 
@@ -475,6 +549,8 @@ static void NormalizeLoadedPlayer(Player *p, int id) {
     p->lifespanLevel = 0.0f;
     p->aimDir = NormalizeSafe(p->aimDir);
 
+    SanitizePlayerLoadout(p);
+
     SetupPlayerCameras(p);
 }
 
@@ -490,22 +566,25 @@ static void StartWorldSession(Player players[], const char *worldPath, const cha
         InitializePlayer(&players[i], i, spawn);
     }
 
-    Player loadedPlayer = players[0];
-    bool worldLoaded = LoadWorldState(worldPath, &loadedPlayer);
+    bool worldLoaded = LoadWorldState(worldPath, &players[0]);
     if (worldLoaded) {
-        players[0] = loadedPlayer;
         NormalizeLoadedPlayer(&players[0], 0);
     }
 
     if (multiplayer && !isHost) {
-        Player profilePlayer = players[0];
-        if (LoadPlayerProfile(profilePath, &profilePlayer)) {
-            CopyPlayerLoadout(&players[0], &profilePlayer);
-            players[0].activeSlot = profilePlayer.activeSlot;
-            players[0].castLayer = profilePlayer.castLayer;
-            players[0].friendlyFire = profilePlayer.friendlyFire;
-            players[0].health = players[0].maxHealth;
-            players[0].aimDir = NormalizeSafe(profilePlayer.aimDir);
+        Player *profilePlayer = (Player *)malloc(sizeof(*profilePlayer));
+        if (profilePlayer) {
+            *profilePlayer = players[0];
+            if (LoadPlayerProfile(profilePath, profilePlayer)) {
+                CopyPlayerLoadout(&players[0], profilePlayer);
+                players[0].activeSlot = profilePlayer->activeSlot;
+                players[0].castLayer = profilePlayer->castLayer;
+                players[0].friendlyFire = profilePlayer->friendlyFire;
+                players[0].health = players[0].maxHealth;
+                players[0].aimDir = NormalizeSafe(profilePlayer->aimDir);
+                SanitizePlayerLoadout(&players[0]);
+            }
+            free(profilePlayer);
         }
     }
 
@@ -828,6 +907,7 @@ static void ApplyRemoteState(Player *remote, const NetStatePacket *pkt) {
 static void ApplyRemoteLoadout(Player *remote, const NetLoadoutPacket *pkt) {
     int slot = ClampSlotIndex(pkt->slotIndex);
     remote->hotbar[slot] = pkt->slotData;
+    SanitizeHotbarSlot(&remote->hotbar[slot]);
     remote->activeSlot = ClampSlotIndex(pkt->activeSlot);
 }
 
@@ -1082,7 +1162,7 @@ int main() {
     RenderTexture2D target = LoadRenderTexture(SCREEN_W, SCREEN_H);
     SetTextureFilter(target.texture, TEXTURE_FILTER_POINT);
 
-    Player players[MAX_PLAYERS];
+    static Player players[MAX_PLAYERS];
     for (int i = 0; i < MAX_PLAYERS; i++) {
         Vector2 spawn = {
             WORLD_W * 0.5f + ((float)(i % 4) - 1.5f) * 55.0f,
@@ -1163,6 +1243,8 @@ int main() {
         LocalNetEvents localEvents = {0};
 
         if (appScreen == APP_GAME) {
+            SanitizePlayerLoadout(p1);
+
             if (IsKeyPressed(KEY_F9) || mobileControls.menuPressed) wantsReturnToMenu = true;
 
             if (wantsReturnToMenu) {
@@ -1503,9 +1585,9 @@ int main() {
                 float hazAlpha = fmaxf(0.0f, p1->visionBlend - 1.0f);
 
                 BeginMode2D(p1->worldCamera);
-                    DrawMaterialRealm(matAlpha);
-                    if (nrgAlpha > 0.01f) DrawEnergyRealm(nrgAlpha);
-                    if (hazAlpha > 0.01f) DrawHazardRealm(hazAlpha);
+                    DrawMaterialRealm(matAlpha, p1->worldCamera);
+                    if (nrgAlpha > 0.01f) DrawEnergyRealm(nrgAlpha, p1->worldCamera);
+                    if (hazAlpha > 0.01f) DrawHazardRealm(hazAlpha, p1->worldCamera);
 
                     DrawSingularities(1.0f);
                     DrawNPCs();

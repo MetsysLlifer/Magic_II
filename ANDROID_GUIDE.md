@@ -84,6 +84,23 @@ Change from system icon to mipmap icons:
 - JUMP: jump
 - Top row: PAUSE, CRAFT, LAYER, MENU
 
+### Spellcraft shortcut toolbar (new)
+
+Inside the spell graph editor (CRAFT), use the top toolbar:
+
+- `UNDO` / `REDO`
+- `COPY` / `PASTE`
+- `DEL` (delete selected node branch)
+- `ERASE` (clear graph except root)
+- `ADD` (add child node)
+- `CENTER` (recenter and reset zoom)
+- `MOVE` (toggle pan mode for drag-to-move canvas)
+
+Notes:
+
+- On Android, `MOVE` is important for repositioning the graph without a middle mouse button.
+- Desktop keyboard shortcuts also exist: `Ctrl+Z`, `Ctrl+Y` (`Ctrl+Shift+Z`), `Ctrl+C`, `Ctrl+V`, `Del`, `N`, `R`, `M`.
+
 ## 6) Common issues
 
 ### App closes instantly

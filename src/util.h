@@ -166,9 +166,9 @@ void ResetGame(Player *p);
 bool SaveWorldState(const char *path, Player *p);
 bool LoadWorldState(const char *path, Player *p);
 
-void DrawMaterialRealm(float alpha); 
-void DrawEnergyRealm(float alpha);   
-void DrawHazardRealm(float alpha);
+void DrawMaterialRealm(float alpha, Camera2D camera);
+void DrawEnergyRealm(float alpha, Camera2D camera);
+void DrawHazardRealm(float alpha, Camera2D camera);
 void DrawSingularities(float alpha); // NEW: Visualizer for Black/White Holes
 void DrawProjectiles(Player *p);
 void DrawPlayerEntity(Player *p); 
