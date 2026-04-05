@@ -14,7 +14,7 @@ void SpawnNPC(Vector2 pos, NPCDNA dna) {
             active_npcs[i].velocity = (Vector2){0,0};
             active_npcs[i].zVelocity = 0.0f;
             active_npcs[i].dna = dna;
-            active_npcs[i].health = 5.0f + (dna.mass * 1.0f); // VERY FRAGILE NOW
+            active_npcs[i].health = 5.0f + (dna.mass * 1.0f);
             active_npcs[i].animTime = GetRandomValue(0, 100) / 10.0f;
             active_npcs[i].active = true;
             break;
@@ -72,7 +72,19 @@ void UpdateNPCs(float dt, Player *p) {
         else { speed = n->dna.terrestrial * 1.2f; n->z = 0.0f; }
 
         n->velocity.x = targetDir.x * speed; n->velocity.y = targetDir.y * speed;
-        n->pos.x += n->velocity.x * dt; n->pos.y += n->velocity.y * dt;
+        
+        // BUG FIX: NPCs now physically hit walls and mountains!
+        float nextX = n->pos.x + n->velocity.x * dt;
+        float nextY = n->pos.y + n->velocity.y * dt;
+        int cx = (int)(nextX / PIXEL_SIZE); int cy = (int)(nextY / PIXEL_SIZE);
+        if (cx >= 0 && cx < WIDTH && cy >= 0 && cy < HEIGHT) {
+            if (grid[LAYER_GROUND][cy * WIDTH + cx].cohesion > 80.0f && n->z < 15.0f) {
+                n->velocity.x = 0; n->velocity.y = 0; 
+                nextX = n->pos.x; nextY = n->pos.y;
+            }
+        }
+
+        n->pos.x = nextX; n->pos.y = nextY;
 
         if (n->health <= 0) n->active = false;
     }

@@ -34,8 +34,16 @@ typedef struct {
     int parentId;      
     float temp; float density; float moisture; float cohesion; float charge;
     int movement;      
-    float speedMod; float delay; float distortion; float rangeMod; float sizeMod; int spreadType;
+    
+    bool hasSpeed;   float speedMod; float easeTime; 
+    bool hasDelay;   float delay; 
+    bool hasDistort; float distortion; 
+    bool hasRange;   float rangeMod; 
+    bool hasSize;    float sizeMod; 
+    bool hasSpread;  int spreadType;
+    
     bool active;
+    bool triggered;
 } SpellNode;
 
 typedef struct SigilGraph {
@@ -46,7 +54,9 @@ typedef struct SigilGraph {
 typedef struct {
     float temp; float density; float moisture; float cohesion; float charge; Vector2 velocity;  
     int form; int movement; bool isPermanent;
+    
     float speedMod; float delay; float distortion; float rangeMod; float sizeMod; int spreadType;
+    
     SigilGraph graph; 
 } SpellDNA;
 
@@ -61,8 +71,10 @@ typedef struct {
 } HotbarSlot;
 
 typedef struct {
-    Vector2 pos; Vector2 basePos; Vector2 velocity; SpellDNA payload; int layer; float life; bool active; float animOffset; 
-    float currentDelay; float maxLife; 
+    Vector2 pos; Vector2 basePos; Vector2 baseVelocity; Vector2 velocity; SpellDNA payload; 
+    int rootId; float chargeMult;
+    int layer; float life; float maxLife; bool active; float animOffset; 
+    float flightTime; 
 } Projectile;
 
 typedef struct {
@@ -81,6 +93,9 @@ typedef struct {
     int selectedNodeId;
     int draggingNodeId; 
     int craftCategory; 
+    
+    bool editStates[10]; 
+
     Camera2D craftCamera;
     Camera2D worldCamera; 
 } Player;
@@ -93,7 +108,7 @@ extern NPC active_npcs[50];
 void InitSimulation();
 void UpdateSimulation(float dt, Player *p); 
 void MovePlayer(Player *p, Vector2 delta, float dt); 
-void ResetGame(Player *p); // NEW: Safely resets the ecosystem
+void ResetGame(Player *p); 
 
 void DrawMaterialRealm(float alpha); 
 void DrawEnergyRealm(float alpha);   
@@ -101,17 +116,19 @@ void DrawHazardRealm(float alpha);
 void DrawProjectiles(Player *p);
 void DrawPlayerEntity(Player *p); 
 void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse); 
-void DrawGuideMenu(Player *p, bool *wantsRestart); // UPDATED
+void DrawGuideMenu(Player *p, bool *wantsRestart); 
 
 void DrawNodeSigil(Vector2 center, SpellNode node, float scale, float animOffset);
 void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float rot, float animOffset);
 
 void CompileSigilGraph(SpellDNA *dna);
-void ExecuteSpell(Player *p, Vector2 target, SpellDNA dna, float chargeMultiplier);
-void CastProjectile(Vector2 start, Vector2 target, int layer, SpellDNA dna);
+void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMultiplier);
+void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *dna, int rootId, float chargeMult);
 void InjectEnergy(int x, int y, int z, SpellDNA dna);
 void InjectEnergyArea(int cx, int cy, int z, int radius, SpellDNA dna);
 void InjectBeam(Vector2 start, Vector2 target, int z, SpellDNA dna);
+bool IsDescendant(SigilGraph *g, int child, int root);
+float GetNodeMagnitude(SigilGraph *g, int child, int root, Vector2 *outDir, float *resonance);
 
 void InitNPCs();
 void UpdateNPCs(float dt, Player *p);

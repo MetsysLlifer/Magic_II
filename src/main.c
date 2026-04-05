@@ -1,5 +1,4 @@
 #include "util.h"
-#include "raygui.h" // Notice: NO #define RAYGUI_IMPLEMENTATION here!
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -23,6 +22,7 @@ int main() {
     player.craftCategory = 0;
     player.draggingNodeId = -1;
     player.friendlyFire = false; 
+    for(int i=0; i<10; i++) player.editStates[i] = false;
     
     for(int i=0; i<10; i++) {
         player.hotbar[i].type = ITEM_SPELL;
@@ -33,12 +33,22 @@ int main() {
         player.hotbar[i].spell.graph.nodes[0].pos = (Vector2){0, 0};
         player.hotbar[i].spell.graph.nodes[0].temp = 20.0f;
         player.hotbar[i].spell.graph.nodes[0].movement = MOVE_STRAIGHT;
+        
+        // GEAR INIT
+        player.hotbar[i].spell.graph.nodes[0].hasSpeed = false;
+        player.hotbar[i].spell.graph.nodes[0].hasDelay = false;
+        player.hotbar[i].spell.graph.nodes[0].hasDistort = false;
+        player.hotbar[i].spell.graph.nodes[0].hasRange = false;
+        player.hotbar[i].spell.graph.nodes[0].hasSize = false;
+        player.hotbar[i].spell.graph.nodes[0].hasSpread = false;
+
         player.hotbar[i].spell.graph.nodes[0].speedMod = 1.0f;
+        player.hotbar[i].spell.graph.nodes[0].easeTime = 0.0f;
         player.hotbar[i].spell.graph.nodes[0].delay = 0.0f;
         player.hotbar[i].spell.graph.nodes[0].distortion = 0.0f;
         player.hotbar[i].spell.graph.nodes[0].rangeMod = 1.0f;
         player.hotbar[i].spell.graph.nodes[0].sizeMod = 1.0f;
-        player.hotbar[i].spell.graph.nodes[0].spreadType = 0;
+        player.hotbar[i].spell.graph.nodes[0].spreadType = SPREAD_OFF;
         
         player.hotbar[i].spell.form = FORM_PROJECTILE;
     }
@@ -71,18 +81,16 @@ int main() {
             }
         }
         
-        float scaleX = (float)GetScreenWidth() / SCREEN_W;
-        float scaleY = (float)GetScreenHeight() / SCREEN_H;
+        float scale = fminf((float)GetScreenWidth() / SCREEN_W, (float)GetScreenHeight() / SCREEN_H);
         
         Vector2 mousePos = GetMousePosition();
-        Vector2 virtualMouse = { mousePos.x / scaleX, mousePos.y / scaleY };
+        Vector2 virtualMouse = { 0 };
+        virtualMouse.x = (mousePos.x - (GetScreenWidth() - (SCREEN_W * scale)) * 0.5f) / scale;
+        virtualMouse.y = (mousePos.y - (GetScreenHeight() - (SCREEN_H * scale)) * 0.5f) / scale;
         virtualMouse.x = fmaxf(0.0f, fminf(virtualMouse.x, SCREEN_W));
         virtualMouse.y = fmaxf(0.0f, fminf(virtualMouse.y, SCREEN_H));
 
-        if (wantsRestart) {
-            ResetGame(&player);
-            wantsRestart = false;
-        }
+        if (wantsRestart) { ResetGame(&player); wantsRestart = false; }
 
         if (IsKeyPressed(KEY_ESCAPE)) player.showGuide = !player.showGuide;
         if (IsKeyPressed(KEY_GRAVE) && !player.showGuide && player.health > 0) {
@@ -128,7 +136,7 @@ int main() {
                     player.chargeLevel += dt * 2.0f; 
                     if (player.chargeLevel > 3.0f) player.chargeLevel = 3.0f; 
                 } else if (IsMouseButtonReleased(0)) {
-                    ExecuteSpell(&player, worldMouse, active->spell, 1.0f + player.chargeLevel);
+                    ExecuteSpell(&player, worldMouse, &active->spell, 1.0f + player.chargeLevel);
                     player.isCharging = false;
                     player.chargeLevel = 0.0f;
                 }
@@ -169,9 +177,7 @@ int main() {
             if (player.health <= 0) {
                 DrawRectangle(0, 0, SCREEN_W, SCREEN_H, Fade(BLACK, 0.8f));
                 DrawText("YOU DIED TO THE ELEMENTS", 240, 180, 20, RED);
-                if (GuiButton((Rectangle){ 325, 230, 150, 40 }, "RESTART PROTOCOL")) {
-                    wantsRestart = true;
-                }
+                DrawText("Press [ ` ] to configure spells before restarting.", 230, 210, 15, GRAY);
             }
             
             DrawInterface(&player, &draftNPC, virtualMouse);
@@ -180,9 +186,14 @@ int main() {
         EndTextureMode();
 
         BeginDrawing();
-            ClearBackground(BLACK);
+            ClearBackground(BLACK); 
             Rectangle sourceRec = { 0.0f, 0.0f, (float)target.texture.width, (float)-target.texture.height };
-            Rectangle destRec = { 0.0f, 0.0f, (float)GetScreenWidth(), (float)GetScreenHeight() };
+            Rectangle destRec = { 
+                (GetScreenWidth() - ((float)SCREEN_W * scale)) * 0.5f, 
+                (GetScreenHeight() - ((float)SCREEN_H * scale)) * 0.5f, 
+                (float)SCREEN_W * scale, 
+                (float)SCREEN_H * scale 
+            };
             DrawTexturePro(target.texture, sourceRec, destRec, (Vector2){0, 0}, 0.0f, WHITE);
         EndDrawing();
     }

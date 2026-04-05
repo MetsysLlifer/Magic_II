@@ -2,11 +2,11 @@
 #define RAYGUI_IMPLEMENTATION
 #include "raygui.h"
 
-void DeleteNodeRec(SpellDNA *dna, int id) {
-    dna->graph.nodes[id].active = false;
+void DeleteNodeRec(SigilGraph *graph, int id) {
+    graph->nodes[id].active = false;
     for(int i = 1; i < MAX_NODES; i++) {
-        if(dna->graph.nodes[i].active && dna->graph.nodes[i].parentId == id) {
-            DeleteNodeRec(dna, i);
+        if(graph->nodes[i].active && graph->nodes[i].parentId == id) {
+            DeleteNodeRec(graph, i);
         }
     }
 }
@@ -28,16 +28,16 @@ void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float ro
     
     for(int i=1; i<MAX_NODES; i++) {
         if(graph->nodes[i].active && graph->nodes[i].parentId != -1) {
-            Vector2 p1 = graph->nodes[i].pos;
-            Vector2 p2 = graph->nodes[graph->nodes[i].parentId].pos;
-            
-            Vector2 r1 = { p1.x - corePos.x, p1.y - corePos.y };
-            Vector2 r2 = { p2.x - corePos.x, p2.y - corePos.y };
-            
-            Vector2 f1 = { center.x + (r1.x*cosf(rot) - r1.y*sinf(rot))*mapScale, center.y + (r1.x*sinf(rot) + r1.y*cosf(rot))*mapScale };
-            Vector2 f2 = { center.x + (r2.x*cosf(rot) - r2.y*sinf(rot))*mapScale, center.y + (r2.x*sinf(rot) + r2.y*cosf(rot))*mapScale };
-            
-            DrawLineEx(f1, f2, fmaxf(1.0f, scale*0.1f), Fade(SKYBLUE, 0.6f));
+            // FIX: Ensure safe array lookup for rendering
+            int pId = graph->nodes[i].parentId;
+            if (pId >= 0 && pId < MAX_NODES && graph->nodes[pId].active) {
+                Vector2 p1 = graph->nodes[i].pos; Vector2 p2 = graph->nodes[pId].pos;
+                Vector2 r1 = { p1.x - corePos.x, p1.y - corePos.y }; Vector2 r2 = { p2.x - corePos.x, p2.y - corePos.y };
+                
+                Vector2 f1 = { center.x + (r1.x*cosf(rot) - r1.y*sinf(rot))*mapScale, center.y + (r1.x*sinf(rot) + r1.y*cosf(rot))*mapScale };
+                Vector2 f2 = { center.x + (r2.x*cosf(rot) - r2.y*sinf(rot))*mapScale, center.y + (r2.x*sinf(rot) + r2.y*cosf(rot))*mapScale };
+                DrawLineEx(f1, f2, fmaxf(1.0f, scale*0.1f), Fade(SKYBLUE, 0.6f));
+            }
         }
     }
     
@@ -45,7 +45,6 @@ void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float ro
         if(graph->nodes[i].active) {
             Vector2 rel = { graph->nodes[i].pos.x - corePos.x, graph->nodes[i].pos.y - corePos.y };
             Vector2 fPos = { center.x + (rel.x*cosf(rot) - rel.y*sinf(rot))*mapScale, center.y + (rel.x*sinf(rot) + rel.y*cosf(rot))*mapScale };
-            
             float nodeScale = (i == 0) ? scale * 0.6f : scale * 0.4f;
             DrawNodeSigil(fPos, graph->nodes[i], nodeScale, animOffset);
         }
@@ -56,7 +55,8 @@ void DrawNodeSigil(Vector2 center, SpellNode node, float scale, float animOffset
     int points = 3 + (int)(node.charge / 15.0f); 
     if (points > 10) points = 10; if (points < 3) points = 3;
     
-    float baseRadius = scale * (0.5f + (node.density / 100.0f)) * node.sizeMod; 
+    float sizeToUse = node.hasSize ? node.sizeMod : 1.0f;
+    float baseRadius = scale * (0.5f + (node.density / 100.0f)) * sizeToUse; 
     float spikeFactor = (node.temp / 100.0f) * scale; 
     float waveFactor = (node.moisture / 100.0f); 
 
@@ -66,7 +66,7 @@ void DrawNodeSigil(Vector2 center, SpellNode node, float scale, float animOffset
     for (int i = 0; i <= points; i++) {
         float angle = (i * (PI * 2.0f)) / points + animOffset; 
         float r = baseRadius + (i % 2 == 0 ? spikeFactor : -spikeFactor * 0.5f);
-        if (node.distortion > 0) r += sinf(animOffset * 10.0f + i) * (node.distortion / 20.0f);
+        if (node.hasDistort && node.distortion > 0) r += sinf(animOffset * 10.0f + i) * (node.distortion / 20.0f);
 
         Vector2 p = { center.x + cosf(angle) * r, center.y + sinf(angle) * r };
         if (i > 0) {
@@ -212,7 +212,8 @@ void DrawProjectiles(Player *p) {
 void DrawPlayerEntity(Player *p) {
     if (p->health <= 0) return;
     DrawEllipse(p->pos.x, p->pos.y, 6, 3, Fade(BLACK, 0.6f));
-    float stretch = 1.0f + (p->zVelocity / 1000.0f); 
+    
+    float stretch = fmaxf(0.1f, 1.0f + (p->zVelocity / 1000.0f)); 
     float squash = 1.0f / stretch;
     float breathe = (sinf(p->animTime * 4.0f) + 1.0f) * 0.5f;
     float currentWidth = (6.0f * squash) + (breathe * 1.5f);
@@ -229,8 +230,8 @@ void DrawPlayerEntity(Player *p) {
         DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
         DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
 
-        SpellDNA activeDNA = p->hotbar[p->activeSlot].spell;
-        if (activeDNA.charge > 10.0f) {
+        SpellDNA *activeDNA = &p->hotbar[p->activeSlot].spell;
+        if (activeDNA->graph.nodes[0].charge > 10.0f) {
             float t = GetTime() * 40.0f;
             float sparkRadius = radius + 3.0f;
             for(int i = 0; i < 3; i++) {
@@ -253,19 +254,24 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
     DrawRectangleLines(10, 35, 180, 150, GOLD);
     DrawText(TextFormat("ACTIVE SLOT: %d", p->activeSlot + 1), 15, 40, 10, GOLD);
     
-    HotbarSlot activeSlot = p->hotbar[p->activeSlot];
-    if (activeSlot.type == ITEM_SPELL) {
+    HotbarSlot *activeSlot = &p->hotbar[p->activeSlot];
+    if (activeSlot->type == ITEM_SPELL) {
         DrawText("TYPE: ENERGY SCALAR", 15, 55, 10, SKYBLUE);
-        DrawText(TextFormat("Temp: %.0f | Mass: %.0f", activeSlot.spell.temp, activeSlot.spell.density), 15, 70, 10, RAYWHITE);
-        DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", activeSlot.spell.cohesion, activeSlot.spell.moisture), 15, 85, 10, RAYWHITE);
-        DrawText(TextFormat("Chrg: %.0f", activeSlot.spell.charge), 15, 100, 10, RAYWHITE);
-        DrawCompositeSigil((Vector2){100, 140}, &activeSlot.spell.graph, 25.0f, GetTime()*0.5f, GetTime());
+        
+        // FIX: Copy valid data directly into dummy before compiling!
+        SpellDNA dummy = activeSlot->spell;
+        CompileSigilGraph(&dummy);
+        
+        DrawText(TextFormat("Temp: %.0f | Mass: %.0f", dummy.temp, dummy.density), 15, 70, 10, RAYWHITE);
+        DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", dummy.cohesion, dummy.moisture), 15, 85, 10, RAYWHITE);
+        DrawText(TextFormat("Chrg: %.0f", dummy.charge), 15, 100, 10, RAYWHITE);
+        DrawCompositeSigil((Vector2){100, 140}, &activeSlot->spell.graph, 25.0f, GetTime()*0.5f, GetTime());
     } else {
         DrawText("TYPE: BIO-MATRIX", 15, 55, 10, GREEN);
-        DrawText(TextFormat("Mass: %.0f | Int: %.0f", activeSlot.npc.mass, activeSlot.npc.intelligence), 15, 70, 10, RAYWHITE);
-        DrawText(TextFormat("Aero: %.0f | Hyd: %.0f", activeSlot.npc.aero, activeSlot.npc.hydro), 15, 85, 10, RAYWHITE);
-        DrawText(TextFormat("Terr: %.0f | Hst: %.0f", activeSlot.npc.terrestrial, activeSlot.npc.hostility), 15, 100, 10, RAYWHITE);
-        DrawProceduralNPC((Vector2){100, 150}, 0, activeSlot.npc, 1.0f); 
+        DrawText(TextFormat("Mass: %.0f | Int: %.0f", activeSlot->npc.mass, activeSlot->npc.intelligence), 15, 70, 10, RAYWHITE);
+        DrawText(TextFormat("Aero: %.0f | Hyd: %.0f", activeSlot->npc.aero, activeSlot->npc.hydro), 15, 85, 10, RAYWHITE);
+        DrawText(TextFormat("Terr: %.0f | Hst: %.0f", activeSlot->npc.terrestrial, activeSlot->npc.hostility), 15, 100, 10, RAYWHITE);
+        DrawProceduralNPC((Vector2){100, 150}, 0, activeSlot->npc, 1.0f); 
     }
 
     const char* vState = (p->visionBlend < 0.5f) ? "MAT" : (p->visionBlend < 1.5f) ? "NRG" : "HAZ";
@@ -304,64 +310,89 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
 
         if (p->craftCategory == 0) {
             SpellDNA *activeSpell = &p->hotbar[p->activeSlot].spell;
+            SigilGraph *activeGraph = &activeSpell->graph; 
             Rectangle canvasBounds = {230, 60, 420, 340}; 
             DrawLine(220, 60, 220, 400, DARKGRAY);
 
             DrawText("SCALARS & BEHAVIOR", 40, 65, 12, GOLD);
-            if (p->selectedNodeId != -1 && activeSpell->graph.nodes[p->selectedNodeId].active) {
-                SpellNode *n = &activeSpell->graph.nodes[p->selectedNodeId];
+            if (p->selectedNodeId != -1 && activeGraph->nodes[p->selectedNodeId].active) {
+                SpellNode *n = &activeGraph->nodes[p->selectedNodeId];
                 DrawText(TextFormat("ID: %d", p->selectedNodeId), 40, 80, 10, SKYBLUE);
                 
-                GuiSlider((Rectangle){80, 95, 120, 10}, "TEMP", NULL, &n->temp, -100, 200);
-                GuiSlider((Rectangle){80, 115, 120, 10}, "MASS", NULL, &n->density, 0, 100);
-                GuiSlider((Rectangle){80, 135, 120, 10}, "COHE", NULL, &n->cohesion, 0, 100);
-                GuiSlider((Rectangle){80, 155, 120, 10}, "WET ", NULL, &n->moisture, 0, 100);
-                GuiSlider((Rectangle){80, 175, 120, 10}, "CHRG", NULL, &n->charge, 0, 100);
+                int ySp = 95;
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "TEMP", NULL, &n->temp, -100, 200);
+                int tV = (int)n->temp; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &tV, -100, 200, p->editStates[0])) p->editStates[0] = !p->editStates[0]; n->temp = tV; ySp+=18;
 
-                DrawLine(40, 195, 210, 195, DARKGRAY);
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "MASS", NULL, &n->density, 0, 100);
+                int mV = (int)n->density; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp+=18;
 
-                GuiSlider((Rectangle){80, 205, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f);
-                GuiSlider((Rectangle){80, 225, 120, 10}, "DELAY", NULL, &n->delay, 0.0f, 5.0f);
-                GuiSlider((Rectangle){80, 245, 120, 10}, "DSTRT", NULL, &n->distortion, 0.0f, 100.0f);
-                GuiSlider((Rectangle){80, 265, 120, 10}, "RANGE", NULL, &n->rangeMod, 0.1f, 5.0f);
-                GuiSlider((Rectangle){80, 285, 120, 10}, "SIZE", NULL, &n->sizeMod, 0.1f, 5.0f);
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "COHE", NULL, &n->cohesion, 0, 100);
+                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &cV, 0, 100, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
 
-                DrawText("SPREAD:", 40, 305, 10, WHITE);
-                if(GuiButton((Rectangle){40, 315, 45, 15}, "OFF")) n->spreadType = SPREAD_OFF;
-                if(GuiButton((Rectangle){90, 315, 45, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
-                if(GuiButton((Rectangle){140, 315, 45, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
-                int sx = (n->spreadType == 0) ? 40 : (n->spreadType == 1) ? 90 : 140;
-                DrawRectangleLines(sx, 315, 45, 15, PURPLE);
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "WET", NULL, &n->moisture, 0, 100);
+                int wV = (int)n->moisture; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp+=18;
 
-                DrawText("MOVE:", 40, 340, 10, WHITE);
-                if(GuiButton((Rectangle){40, 350, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
-                if(GuiButton((Rectangle){80, 350, 35, 15}, "SIN")) n->movement = MOVE_SIN;
-                if(GuiButton((Rectangle){120, 350, 35, 15}, "COS")) n->movement = MOVE_COS;
-                if(GuiButton((Rectangle){160, 350, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "CHRG", NULL, &n->charge, 0, 100);
+                int hV = (int)n->charge; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &hV, 0, 100, p->editStates[4])) p->editStates[4] = !p->editStates[4]; n->charge = hV;
+
+                DrawLine(40, 190, 230, 190, DARKGRAY);
+
+                DrawText("ATTACH BEHAVIOR GEARS:", 40, 195, 10, SKYBLUE);
+                GuiToggle((Rectangle){40, 205, 30, 15}, "SPD", &n->hasSpeed);
+                GuiToggle((Rectangle){75, 205, 30, 15}, "DLY", &n->hasDelay);
+                GuiToggle((Rectangle){110, 205, 30, 15}, "SPR", &n->hasSpread);
+                GuiToggle((Rectangle){145, 205, 30, 15}, "DST", &n->hasDistort);
+                GuiToggle((Rectangle){180, 205, 30, 15}, "RNG", &n->hasRange);
+                GuiToggle((Rectangle){215, 205, 30, 15}, "SIZ", &n->hasSize);
+
+                int gY = 225;
+                if(n->hasSpeed) { 
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f); gY+=15; 
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "EASE", NULL, &n->easeTime, 0.0f, 3.0f); gY+=15; 
+                }
+                if(n->hasDelay) { GuiSlider((Rectangle){80, gY, 120, 10}, "DELAY", NULL, &n->delay, 0.0f, 5.0f); gY+=15; }
+                if(n->hasDistort) { GuiSlider((Rectangle){80, gY, 120, 10}, "DSTRT", NULL, &n->distortion, 0.0f, 100.0f); gY+=15; }
+                if(n->hasRange) { GuiSlider((Rectangle){80, gY, 120, 10}, "RANGE", NULL, &n->rangeMod, 0.1f, 5.0f); gY+=15; }
+                if(n->hasSize) { GuiSlider((Rectangle){80, gY, 120, 10}, "SIZE", NULL, &n->sizeMod, 0.1f, 5.0f); gY+=15; }
+                
+                if(n->hasSpread) {
+                    DrawText("SPREAD TYPE:", 40, gY, 10, WHITE);
+                    if(GuiButton((Rectangle){40, gY+10, 45, 15}, "OFF")) n->spreadType = SPREAD_OFF;
+                    if(GuiButton((Rectangle){90, gY+10, 45, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
+                    if(GuiButton((Rectangle){140, gY+10, 45, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
+                    int sx = (n->spreadType == 0) ? 40 : (n->spreadType == 1) ? 90 : 140;
+                    DrawRectangleLines(sx, gY+10, 45, 15, PURPLE);
+                    gY+=30;
+                }
+
+                DrawText("MOVE:", 40, 360, 10, WHITE);
+                if(GuiButton((Rectangle){40, 370, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
+                if(GuiButton((Rectangle){80, 370, 35, 15}, "SIN")) n->movement = MOVE_SIN;
+                if(GuiButton((Rectangle){120, 370, 35, 15}, "COS")) n->movement = MOVE_COS;
+                if(GuiButton((Rectangle){160, 370, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
                 int mx = (n->movement == 0) ? 40 : (n->movement == 1) ? 80 : (n->movement == 2) ? 120 : 160;
-                DrawRectangleLines(mx, 350, 35, 15, GREEN);
+                DrawRectangleLines(mx, 370, 35, 15, GREEN);
             }
 
-            DrawText("FORM:", 40, 375, 10, WHITE);
-            if(GuiButton((Rectangle){80, 375, 30, 15}, "PRJ")) activeSpell->form = FORM_PROJECTILE;
-            if(GuiButton((Rectangle){115, 375, 30, 15}, "MNS")) activeSpell->form = FORM_MANIFEST;
-            if(GuiButton((Rectangle){150, 375, 30, 15}, "AUR")) activeSpell->form = FORM_AURA;
-            int fx = (activeSpell->form == 0) ? 80 : (activeSpell->form == 1) ? 115 : 150;
-            DrawRectangleLines(fx, 375, 30, 15, PURPLE);
-
-            GuiCheckBox((Rectangle){40, 400, 15, 15}, "ETERNAL", &activeSpell->isPermanent);
-            GuiCheckBox((Rectangle){110, 400, 15, 15}, "FRND. FIRE", &p->friendlyFire); 
+            DrawText("GLOBAL FORM:", 40, 395, 10, WHITE);
+            if(GuiButton((Rectangle){110, 395, 30, 15}, "PRJ")) activeSpell->form = FORM_PROJECTILE;
+            if(GuiButton((Rectangle){145, 395, 30, 15}, "MNS")) activeSpell->form = FORM_MANIFEST;
+            if(GuiButton((Rectangle){180, 395, 30, 15}, "AUR")) activeSpell->form = FORM_AURA;
+            int fx = (activeSpell->form == 0) ? 110 : (activeSpell->form == 1) ? 145 : 180;
+            DrawRectangleLines(fx, 395, 30, 15, PURPLE);
 
             DrawLine(660, 60, 660, 400, DARKGRAY);
             DrawText("ANALYSIS", 670, 70, 12, GOLD);
-            DrawText(TextFormat("TIME: %.1fs", activeSpell->delay + ((activeSpell->movement==MOVE_ORBIT)?10.0f:1.5f)*activeSpell->rangeMod), 670, 100, 10, RAYWHITE);
-            DrawText(TextFormat("RNG: x%.1f", activeSpell->rangeMod), 670, 120, 10, RAYWHITE);
-            DrawText(TextFormat("SPD: %d%%", (int)(activeSpell->speedMod * 100)), 670, 140, 10, RAYWHITE);
-            DrawText(TextFormat("SIZE: x%.1f", activeSpell->sizeMod), 670, 160, 10, RAYWHITE);
-            const char* sStr = (activeSpell->spreadType==0) ? "OFF" : (activeSpell->spreadType==1) ? "INST" : "COLL";
-            DrawText(TextFormat("SPRD: %s", sStr), 670, 180, 10, RAYWHITE);
 
-            DrawText("INFINITE COMPILER CANVAS", 240, 65, 15, GOLD);
+            float maxTime = 1.5f; 
+            for(int i=0; i<MAX_NODES; i++) {
+                if(activeGraph->nodes[i].active && activeGraph->nodes[i].hasDelay) {
+                    if(activeGraph->nodes[i].delay + 1.5f > maxTime) maxTime = activeGraph->nodes[i].delay + 1.5f;
+                }
+            }
+            DrawText(TextFormat("MAX TIME: %.1fs", maxTime), 670, 100, 10, RAYWHITE);
+
+            DrawText("INFINITE COMPILER CANVAS", 260, 65, 15, GOLD);
             if (CheckCollisionPointRec(virtualMouse, canvasBounds)) {
                 p->craftCamera.zoom += GetMouseWheelMove() * 0.1f;
                 if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
@@ -373,35 +404,39 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                     Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
                     int clickedId = -1;
                     for(int i=0; i<MAX_NODES; i++) {
-                        if (activeSpell->graph.nodes[i].active && CheckCollisionPointCircle(worldMouse, activeSpell->graph.nodes[i].pos, 20.0f)) {
+                        if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
                             clickedId = i; break;
                         }
                     }
                     if (clickedId != -1) { p->selectedNodeId = clickedId; p->draggingNodeId = clickedId; } 
                     else if (p->selectedNodeId != -1) {
                         for(int i=0; i<MAX_NODES; i++) {
-                            if (!activeSpell->graph.nodes[i].active) {
-                                activeSpell->graph.nodes[i].active = true; activeSpell->graph.nodes[i].parentId = p->selectedNodeId;
-                                activeSpell->graph.nodes[i].pos = worldMouse; activeSpell->graph.nodes[i].movement = MOVE_STRAIGHT;
-                                activeSpell->graph.nodes[i].speedMod = 1.0f; activeSpell->graph.nodes[i].delay = 0.0f;
-                                activeSpell->graph.nodes[i].distortion = 0.0f; activeSpell->graph.nodes[i].rangeMod = 1.0f;
-                                activeSpell->graph.nodes[i].sizeMod = 1.0f; activeSpell->graph.nodes[i].spreadType = 0;
+                            if (!activeGraph->nodes[i].active) {
+                                activeGraph->nodes[i].active = true; activeGraph->nodes[i].parentId = p->selectedNodeId;
+                                activeGraph->nodes[i].pos = worldMouse; activeGraph->nodes[i].movement = MOVE_STRAIGHT;
+                                activeGraph->nodes[i].hasSpeed = false; activeGraph->nodes[i].hasDelay = false;
+                                activeGraph->nodes[i].hasSpread = false; activeGraph->nodes[i].hasDistort = false;
+                                activeGraph->nodes[i].hasRange = false; activeGraph->nodes[i].hasSize = false;
+                                activeGraph->nodes[i].speedMod = 1.0f; activeGraph->nodes[i].easeTime = 0.0f;
+                                activeGraph->nodes[i].delay = 0.0f; activeGraph->nodes[i].distortion = 0.0f;
+                                activeGraph->nodes[i].rangeMod = 1.0f; activeGraph->nodes[i].sizeMod = 1.0f;
+                                activeGraph->nodes[i].spreadType = 0;
                                 p->selectedNodeId = i; break;
                             }
                         }
                     }
                 }
                 if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && p->draggingNodeId != -1) {
-                    activeSpell->graph.nodes[p->draggingNodeId].pos = GetScreenToWorld2D(virtualMouse, p->craftCamera);
+                    activeGraph->nodes[p->draggingNodeId].pos = GetScreenToWorld2D(virtualMouse, p->craftCamera);
                 }
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) p->draggingNodeId = -1;
 
                 if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
                     Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, p->craftCamera);
                     for(int i=1; i<MAX_NODES; i++) { 
-                        if (activeSpell->graph.nodes[i].active && CheckCollisionPointCircle(worldMouse, activeSpell->graph.nodes[i].pos, 20.0f)) {
-                            DeleteNodeRec(activeSpell, i); 
-                            if (!activeSpell->graph.nodes[p->selectedNodeId].active) p->selectedNodeId = 0;
+                        if (activeGraph->nodes[i].active && CheckCollisionPointCircle(worldMouse, activeGraph->nodes[i].pos, 20.0f)) {
+                            DeleteNodeRec(activeGraph, i); 
+                            if (!activeGraph->nodes[p->selectedNodeId].active) p->selectedNodeId = 0;
                             break; 
                         }
                     }
@@ -414,24 +449,27 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                     DrawLine(i, -1000, i, 1000, Fade(DARKGRAY, 0.3f)); DrawLine(-1000, i, 1000, i, Fade(DARKGRAY, 0.3f));
                 }
                 for(int i=0; i<MAX_NODES; i++) {
-                    if (!activeSpell->graph.nodes[i].active || activeSpell->graph.nodes[i].parentId == -1) continue;
-                    Vector2 parentPos = activeSpell->graph.nodes[activeSpell->graph.nodes[i].parentId].pos;
-                    DrawLineEx(parentPos, activeSpell->graph.nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
+                    if (!activeGraph->nodes[i].active || activeGraph->nodes[i].parentId == -1) continue;
                     
-                    Vector2 mid = { (parentPos.x + activeSpell->graph.nodes[i].pos.x)/2, (parentPos.y + activeSpell->graph.nodes[i].pos.y)/2 };
-                    DrawText(TextFormat("%.1fs | %d%%", activeSpell->graph.nodes[i].delay, (int)(activeSpell->graph.nodes[i].speedMod*100)), mid.x-10, mid.y-10, 10, RAYWHITE);
-                    DrawCircleV(mid, 3.0f, RAYWHITE);
+                    int pId = activeGraph->nodes[i].parentId;
+                    if (pId >= 0 && pId < MAX_NODES && activeGraph->nodes[pId].active) {
+                        Vector2 parentPos = activeGraph->nodes[pId].pos;
+                        DrawLineEx(parentPos, activeGraph->nodes[i].pos, 2.0f, Fade(SKYBLUE, 0.6f));
+                        
+                        Vector2 mid = { (parentPos.x + activeGraph->nodes[i].pos.x)/2, (parentPos.y + activeGraph->nodes[i].pos.y)/2 };
+                        if (activeGraph->nodes[i].hasDelay) DrawText(TextFormat("%.1fs", activeGraph->nodes[i].delay), mid.x-10, mid.y-10, 10, RAYWHITE);
+                        if (activeGraph->nodes[i].hasSpeed) DrawCircle(mid.x, mid.y+5, 2.0f, GOLD); 
+                        DrawCircleV(mid, 3.0f, RAYWHITE);
+                    }
                 }
                 for(int i=0; i<MAX_NODES; i++) {
-                    if (!activeSpell->graph.nodes[i].active) continue;
+                    if (!activeGraph->nodes[i].active) continue;
                     Color ringColor = (i == p->selectedNodeId) ? GOLD : RAYWHITE;
-                    if (i == 0) DrawCircleLines(activeSpell->graph.nodes[i].pos.x, activeSpell->graph.nodes[i].pos.y, 25.0f, PURPLE); 
-                    DrawCircleLines(activeSpell->graph.nodes[i].pos.x, activeSpell->graph.nodes[i].pos.y, 18.0f, ringColor);
-                    DrawNodeSigil(activeSpell->graph.nodes[i].pos, activeSpell->graph.nodes[i], 8.0f, GetTime());
+                    if (i == 0) DrawCircleLines(activeGraph->nodes[i].pos.x, activeGraph->nodes[i].pos.y, 25.0f, PURPLE); 
+                    DrawCircleLines(activeGraph->nodes[i].pos.x, activeGraph->nodes[i].pos.y, 18.0f, ringColor);
+                    DrawNodeSigil(activeGraph->nodes[i].pos, activeGraph->nodes[i], 8.0f, GetTime());
                 }
             EndMode2D(); EndScissorMode();
-            
-            CompileSigilGraph(activeSpell); 
 
         } else if (p->craftCategory == 1) {
             DrawText("ARTIFICIAL SUPER INTEL (ASI)", 70, 70, 15, GREEN);
@@ -479,8 +517,5 @@ void DrawGuideMenu(Player *p, bool *wantsRestart) {
     DrawText("- [ TAB ]: Quick-Swap Vision or Crafting Category", 130, 280, 10, PURPLE);
     DrawText("- [ F11 ]: Toggle Fullscreen", 130, 295, 10, GOLD); 
 
-    // SYSTEM RESET BUTTON
-    if (GuiButton((Rectangle){ 130, 325, 150, 30 }, "RESTART WORLD")) {
-        *wantsRestart = true;
-    }
+    if (GuiButton((Rectangle){ 130, 325, 150, 30 }, "RESTART WORLD")) *wantsRestart = true;
 }
