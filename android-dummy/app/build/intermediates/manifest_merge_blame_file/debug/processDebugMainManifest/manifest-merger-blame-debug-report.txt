@@ -1,0 +1,71 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.magicii.dummy"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:2:5-67
+11-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:2:22-64
+12
+13    <uses-feature
+13-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:3:5-78
+14        android:glEsVersion="0x00020000"
+14-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:3:19-51
+15        android:required="true" />
+15-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:3:52-75
+16
+17    <application
+17-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:5:5-29:19
+18        android:allowBackup="true"
+18-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:6:9-35
+19        android:debuggable="true"
+20        android:extractNativeLibs="true"
+21        android:icon="@android:drawable/sym_def_app_icon"
+21-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:7:9-58
+22        android:label="@string/app_name"
+22-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:8:9-41
+23        android:roundIcon="@android:drawable/sym_def_app_icon"
+23-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:9:9-63
+24        android:supportsRtl="true"
+24-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:10:9-35
+25        android:testOnly="true"
+26        android:theme="@style/Theme.MagicIIDummy" >
+26-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:11:9-50
+27        <activity
+27-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:13:9-28:20
+28            android:name="android.app.NativeActivity"
+28-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:14:13-54
+29            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout"
+29-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:15:13-106
+30            android:exported="true"
+30-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:16:13-36
+31            android:launchMode="singleTask"
+31-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:17:13-44
+32            android:screenOrientation="landscape" >
+32-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:18:13-50
+33            <meta-data
+33-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:20:13-22:40
+34                android:name="android.app.lib_name"
+34-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:21:17-52
+35                android:value="main" />
+35-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:22:17-37
+36
+37            <intent-filter>
+37-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:24:13-27:29
+38                <action android:name="android.intent.action.MAIN" />
+38-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:25:17-69
+38-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:25:25-66
+39
+40                <category android:name="android.intent.category.LAUNCHER" />
+40-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:26:17-77
+40-->/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/AndroidManifest.xml:26:27-74
+41            </intent-filter>
+42        </activity>
+43    </application>
+44
+45</manifest>

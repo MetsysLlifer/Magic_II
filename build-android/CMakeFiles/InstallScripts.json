@@ -1,0 +1,9 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/build-android/cmake_install.cmake",
+		"/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-build/cmake_install.cmake",
+		"/Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-build/raylib/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

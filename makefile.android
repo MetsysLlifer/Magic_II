@@ -1,0 +1,27 @@
+ANDROID_NDK_HOME ?= $(ANDROID_NDK_ROOT)
+ifeq ($(strip $(ANDROID_NDK_HOME)),)
+ANDROID_NDK_HOME := $(shell ls -1d $(HOME)/Library/Android/sdk/ndk/* 2>/dev/null | sort | tail -n1)
+endif
+ANDROID_ABI ?= arm64-v8a
+ANDROID_PLATFORM ?= android-24
+ANDROID_BUILD_DIR ?= build-android
+CMAKE_GENERATOR ?= Unix Makefiles
+
+.PHONY: android-configure android-build android-clean
+
+android-configure:
+	@if [ -z "$(ANDROID_NDK_HOME)" ]; then \
+		echo "ANDROID_NDK_HOME (or ANDROID_NDK_ROOT) is not set"; \
+		exit 1; \
+	fi
+	cmake -S . -B $(ANDROID_BUILD_DIR) -G "$(CMAKE_GENERATOR)" \
+		-DCMAKE_TOOLCHAIN_FILE="$(ANDROID_NDK_HOME)/build/cmake/android.toolchain.cmake" \
+		-DANDROID_ABI=$(ANDROID_ABI) \
+		-DANDROID_PLATFORM=$(ANDROID_PLATFORM) \
+		-DMAGICII_USE_FETCHCONTENT_RAYLIB=ON
+
+android-build: android-configure
+	cmake --build $(ANDROID_BUILD_DIR)
+
+android-clean:
+	rm -rf $(ANDROID_BUILD_DIR)

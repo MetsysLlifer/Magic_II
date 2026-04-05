@@ -1,0 +1,7 @@
+com.magicii.dummy.app-pngs-0 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/build/generated/res/pngs/debug
+com.magicii.dummy.app-resValues-1 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/build/generated/res/resValues/debug
+com.magicii.dummy.app-packageDebugResources-2 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.magicii.dummy.app-packageDebugResources-3 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.magicii.dummy.app-debug-4 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.magicii.dummy.app-debug-5 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/debug/res
+com.magicii.dummy.app-main-6 /Users/martindelrio/San Carlos/2nd Year/DSA/Raylib/Code/Magic_II/android-dummy/app/src/main/res

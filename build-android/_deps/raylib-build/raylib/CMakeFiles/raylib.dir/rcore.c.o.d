@@ -1,0 +1,134 @@
+_deps/raylib-build/raylib/CMakeFiles/raylib.dir/rcore.c.o: \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/rcore.c \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/raylib.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/stdarg.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stdarg___gnuc_va_list.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stdarg_va_list.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stdarg_va_arg.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stdarg___va_copy.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stdarg_va_copy.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/stdbool.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/config.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/utils.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/stdio.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/cdefs.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/versioning.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/api-level.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/get_device_api_level_inlines.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/ndk-version.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/stddef.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stddef_ptrdiff_t.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stddef_size_t.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stddef_wchar_t.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stddef_null.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/__stddef_offsetof.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/stdint.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/stdint.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/wchar_limits.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/int-ll64.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/bitsperlong.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/bitsperlong.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/posix_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/stddef.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/compiler_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/compiler.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/posix_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/posix_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/pthread_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/seek_constants.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/stdio.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/asset_manager.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/stdlib.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/alloca.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/wait.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/wait.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/malloc.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/xlocale.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/stdlib.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/legacy_stdlib_inlines.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/stdlib_inlines.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/string.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/strcasecmp.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/string.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/time.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/time.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/time.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/timespec.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/time_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/select.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/signal.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/sigcontext.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/sve_context.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/signal_types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/limits.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/limits.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/float.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/limits.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/posix_limits.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/signal.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/signal.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/signal.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/signal-defs.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/siginfo.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/siginfo.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/ucontext.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/user.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/page_size.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/math.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/rlgl.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/GLES2/gl2.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/GLES2/gl2platform.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/KHR/khrplatform.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/GLES2/gl2ext.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/raymath.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/rgestures.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/rcamera.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/external/msf_gif.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/external/sinfl.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/assert.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/external/sdefl.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/external/rprand.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/unistd.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fcntl.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/getentropy.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/getopt.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/ioctl.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/lockf.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/sysconf.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/unistd.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/legacy_unistd_inlines.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/swab.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sys/stat.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/stat.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/stat.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/dirent.h \
+  /Users/martindelrio/San\ Carlos/2nd\ Year/DSA/Raylib/Code/Magic_II/build-android/_deps/raylib-src/src/platforms/rcore_android.c \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/sources/android/native_app_glue/android_native_app_glue.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/poll.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/poll.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/aarch64-linux-android/asm/poll.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/asm-generic/poll.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/bits/fortify/poll.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/pthread.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/sched.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/sched.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/linux/sched/types.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/configuration.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/looper.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/native_activity.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/jni.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/input.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/keycodes.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/native_window.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/data_space.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/19/include/inttypes.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/inttypes.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/hardware_buffer.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/rect.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/android/window.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/EGL/egl.h \
+  /Users/martindelrio/Library/Android/sdk/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/sysroot/usr/include/EGL/eglplatform.h

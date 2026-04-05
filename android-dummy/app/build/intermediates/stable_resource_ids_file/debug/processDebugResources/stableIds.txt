@@ -1,0 +1,2 @@
+com.magicii.dummy:style/Theme.MagicIIDummy = 0x7f020000
+com.magicii.dummy:string/app_name = 0x7f010000

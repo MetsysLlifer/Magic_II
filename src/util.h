@@ -22,7 +22,7 @@
 #define MAX_PROJECTILES 100
 #define MAX_NPCS 50
 #define MAX_SINGULARITIES 20
-#define MAX_PLAYERS 2
+#define MAX_PLAYERS 8
 
 typedef enum { FORM_PROJECTILE = 0, FORM_MANIFEST = 1, FORM_AURA = 2, FORM_BEAM = 3 } SpellForm;
 typedef enum { MOVE_STRAIGHT = 0, MOVE_SIN = 1, MOVE_COS = 2, MOVE_ORBIT = 3 } MovementType;
@@ -173,7 +173,15 @@ void DrawSingularities(float alpha); // NEW: Visualizer for Black/White Holes
 void DrawProjectiles(Player *p);
 void DrawPlayerEntity(Player *p); 
 void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse); 
-void DrawGuideMenu(Player *p, bool *wantsRestart); 
+void DrawGuideMenu(Player *p,
+                   bool *wantsRestart,
+                   bool *wantsReturnToMenu,
+                   bool *wantsRevive,
+                   bool *showAbout,
+                   bool *showMore,
+                   bool canRestartWorld,
+                   bool multiplayerActive,
+                   bool isHost);
 
 void DrawNodeSigil(Vector2 center, SpellNode node, float scale, float animOffset);
 void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float rot, float animOffset);

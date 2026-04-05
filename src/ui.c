@@ -611,22 +611,71 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
     }
 }
 
-void DrawGuideMenu(Player *p, bool *wantsRestart) {
+void DrawGuideMenu(Player *p,
+                   bool *wantsRestart,
+                   bool *wantsReturnToMenu,
+                   bool *wantsRevive,
+                   bool *showAbout,
+                   bool *showMore,
+                   bool canRestartWorld,
+                   bool multiplayerActive,
+                   bool isHost) {
     if (!p->showGuide) return;
-    DrawRectangle(100, 50, 600, 350, Fade(DARKGRAY, 0.95f));
-    DrawRectangleLines(100, 50, 600, 350, WHITE);
-    DrawText("METSYS: ARCHITECTURE OF MAGIC", 120, 70, 20, GOLD);
-    DrawText("--------------------------------------------------", 120, 90, 20, GRAY);
-    
-    DrawText("DUAL CHANNEL CASTING:", 120, 120, 15, SKYBLUE);
-    DrawText("- INTENSITY [Hold LMB]: Multiplies heat, mass, and velocity.", 130, 145, 10, WHITE);
-    DrawText("- LIFESPAN [Hold C]: Multiplies cohesion and duration (Release LMB to Cast).", 130, 160, 10, WHITE);
 
-    DrawText("CONTROLS:", 120, 210, 15, SKYBLUE);
-    DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [ TAB ]: Change View", 130, 235, 10, WHITE);
-    DrawText("- [SHIFT]: Toggle Cast Target (Ground vs Air)", 130, 250, 10, GREEN); 
-    DrawText("- [ ` ]: Compiler   |   [ESC]: Guide", 130, 265, 10, WHITE);
-    DrawText("- [ F11 ]: Toggle Fullscreen", 130, 280, 10, GOLD); 
+    DrawRectangle(90, 45, 620, 360, Fade(DARKGRAY, 0.96f));
+    DrawRectangleLines(90, 45, 620, 360, WHITE);
+    DrawText("PAUSED", 112, 62, 24, GOLD);
+    DrawText(multiplayerActive ? (isHost ? "SESSION: MULTIPLAYER HOST" : "SESSION: MULTIPLAYER CLIENT") : "SESSION: MY WORLD", 112, 90, 10, SKYBLUE);
 
-    if (GuiButton((Rectangle){ 130, 315, 150, 30 }, "RESTART WORLD")) *wantsRestart = true;
+    DrawText("SPELLCAST BASICS", 112, 116, 13, SKYBLUE);
+    DrawText("LMB hold = power, C hold = duration, release LMB to cast", 112, 132, 10, RAYWHITE);
+    DrawText("TAB switches lens/craft tabs, SHIFT flips cast layer", 112, 146, 10, RAYWHITE);
+#if defined(PLATFORM_ANDROID)
+    DrawText("Android build: map pause/craft controls to touch UI layer", 112, 160, 10, RAYWHITE);
+#else
+    DrawText("F11 fullscreen, ` opens compiler, ESC closes pause", 112, 160, 10, RAYWHITE);
+#endif
+
+    if (GuiButton((Rectangle){112, 190, 138, 30}, "RESUME")) p->showGuide = false;
+    if (GuiButton((Rectangle){260, 190, 138, 30}, "RETURN MENU") && wantsReturnToMenu) *wantsReturnToMenu = true;
+    if (GuiButton((Rectangle){408, 190, 138, 30}, "ABOUT") && showAbout) *showAbout = !(*showAbout);
+    if (GuiButton((Rectangle){556, 190, 138, 30}, "MORE") && showMore) *showMore = !(*showMore);
+
+    if (canRestartWorld) {
+        if (GuiButton((Rectangle){112, 232, 180, 30}, "RESTART WORLD") && wantsRestart) *wantsRestart = true;
+    } else {
+        DrawRectangle(112, 232, 180, 30, Fade(BLACK, 0.5f));
+        DrawRectangleLines(112, 232, 180, 30, GRAY);
+        DrawText("RESTART LOCKED", 130, 241, 10, GRAY);
+    }
+
+    if (GuiButton((Rectangle){304, 232, 180, 30}, multiplayerActive ? "REVIVE PLAYER" : "REVIVE")) {
+        if (wantsRevive) *wantsRevive = true;
+    }
+
+    if (multiplayerActive && !isHost) {
+        DrawText("Client sessions cannot restart the world. Use Revive.", 112, 272, 10, ORANGE);
+    } else if (multiplayerActive && isHost) {
+        DrawText("Host controls world reset. Revive can be used anytime.", 112, 272, 10, LIGHTGRAY);
+    } else {
+        DrawText("Singleplayer supports restart and revive.", 112, 272, 10, LIGHTGRAY);
+    }
+
+    if (showAbout && *showAbout) {
+        DrawRectangle(112, 292, 280, 100, Fade(BLACK, 0.85f));
+        DrawRectangleLines(112, 292, 280, 100, GOLD);
+        DrawText("ABOUT", 126, 304, 12, GOLD);
+        DrawText("Metsys Engine is a temporal-scalar", 126, 322, 10, RAYWHITE);
+        DrawText("spell sandbox with mutable terrain,", 126, 336, 10, RAYWHITE);
+        DrawText("NPC ecology, and LAN-style multiplayer.", 126, 350, 10, RAYWHITE);
+    }
+
+    if (showMore && *showMore) {
+        DrawRectangle(404, 292, 290, 100, Fade(BLACK, 0.85f));
+        DrawRectangleLines(404, 292, 290, 100, SKYBLUE);
+        DrawText("MORE", 418, 304, 12, SKYBLUE);
+        DrawText("In Multiplayer: pick a world slot first.", 418, 322, 10, RAYWHITE);
+        DrawText("Host world save drives the session state.", 418, 336, 10, RAYWHITE);
+        DrawText("Each player keeps item loadout locally.", 418, 350, 10, RAYWHITE);
+    }
 }

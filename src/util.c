@@ -406,15 +406,21 @@ bool SaveWorldState(const char *path, Player *p) {
     FILE *fp = fopen(path, "wb");
     if (!fp) return false;
 
-    PersistBlob blob;
-    memset(&blob, 0, sizeof(blob));
-    blob.magic = SAVE_MAGIC;
-    blob.version = SAVE_VERSION;
-    blob.player = *p;
-    memcpy(blob.worldGrid, grid, sizeof(grid));
-    memcpy(blob.npcs, active_npcs, sizeof(active_npcs));
+    PersistBlob *blob = (PersistBlob *)malloc(sizeof(PersistBlob));
+    if (!blob) {
+        fclose(fp);
+        return false;
+    }
 
-    bool ok = (fwrite(&blob, sizeof(blob), 1, fp) == 1);
+    memset(blob, 0, sizeof(*blob));
+    blob->magic = SAVE_MAGIC;
+    blob->version = SAVE_VERSION;
+    blob->player = *p;
+    memcpy(blob->worldGrid, grid, sizeof(grid));
+    memcpy(blob->npcs, active_npcs, sizeof(active_npcs));
+
+    bool ok = (fwrite(blob, sizeof(*blob), 1, fp) == 1);
+    free(blob);
     fclose(fp);
     return ok;
 }
@@ -425,17 +431,29 @@ bool LoadWorldState(const char *path, Player *p) {
     FILE *fp = fopen(path, "rb");
     if (!fp) return false;
 
-    PersistBlob blob;
-    bool ok = (fread(&blob, sizeof(blob), 1, fp) == 1);
+    PersistBlob *blob = (PersistBlob *)malloc(sizeof(PersistBlob));
+    if (!blob) {
+        fclose(fp);
+        return false;
+    }
+
+    bool ok = (fread(blob, sizeof(*blob), 1, fp) == 1);
     fclose(fp);
 
-    if (!ok) return false;
-    if (blob.magic != SAVE_MAGIC || blob.version != SAVE_VERSION) return false;
+    if (!ok) {
+        free(blob);
+        return false;
+    }
+    if (blob->magic != SAVE_MAGIC || blob->version != SAVE_VERSION) {
+        free(blob);
+        return false;
+    }
 
-    *p = blob.player;
-    memcpy(grid, blob.worldGrid, sizeof(grid));
-    memcpy(prev_grid, blob.worldGrid, sizeof(grid));
-    memcpy(active_npcs, blob.npcs, sizeof(active_npcs));
+    *p = blob->player;
+    memcpy(grid, blob->worldGrid, sizeof(grid));
+    memcpy(prev_grid, blob->worldGrid, sizeof(grid));
+    memcpy(active_npcs, blob->npcs, sizeof(active_npcs));
+    free(blob);
 
     for (int i = 0; i < MAX_PROJECTILES; i++) projectiles[i].active = false;
     for (int i = 0; i < MAX_SINGULARITIES; i++) {

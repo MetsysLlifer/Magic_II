@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.MagicIIDummy" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+</resources>
