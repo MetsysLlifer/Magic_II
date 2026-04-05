@@ -34,7 +34,6 @@ int main() {
         player.hotbar[i].spell.graph.nodes[0].temp = 20.0f;
         player.hotbar[i].spell.graph.nodes[0].movement = MOVE_STRAIGHT;
         
-        // GEAR INIT
         player.hotbar[i].spell.graph.nodes[0].hasSpeed = false;
         player.hotbar[i].spell.graph.nodes[0].hasDelay = false;
         player.hotbar[i].spell.graph.nodes[0].hasDistort = false;
@@ -90,7 +89,10 @@ int main() {
         virtualMouse.x = fmaxf(0.0f, fminf(virtualMouse.x, SCREEN_W));
         virtualMouse.y = fmaxf(0.0f, fminf(virtualMouse.y, SCREEN_H));
 
-        if (wantsRestart) { ResetGame(&player); wantsRestart = false; }
+        if (wantsRestart) {
+            ResetGame(&player);
+            wantsRestart = false;
+        }
 
         if (IsKeyPressed(KEY_ESCAPE)) player.showGuide = !player.showGuide;
         if (IsKeyPressed(KEY_GRAVE) && !player.showGuide && player.health > 0) {
@@ -131,14 +133,36 @@ int main() {
             Vector2 worldMouse = GetScreenToWorld2D(virtualMouse, player.worldCamera);
 
             if (active->type == ITEM_SPELL) {
-                if (IsMouseButtonDown(0)) {
+                
+                // DUAL CHANNEL CASTING LOGIC
+                bool holdingLMB = IsMouseButtonDown(0);
+                bool holdingC = IsKeyDown(KEY_C);
+
+                if (holdingLMB) {
                     player.isCharging = true;
                     player.chargeLevel += dt * 2.0f; 
-                    if (player.chargeLevel > 3.0f) player.chargeLevel = 3.0f; 
-                } else if (IsMouseButtonReleased(0)) {
-                    ExecuteSpell(&player, worldMouse, &active->spell, 1.0f + player.chargeLevel);
+                    if (player.chargeLevel > 4.0f) player.chargeLevel = 4.0f; 
+                } else {
                     player.isCharging = false;
+                    player.chargeLevel -= dt * 4.0f; 
+                    if (player.chargeLevel < 0.0f) player.chargeLevel = 0.0f; 
+                }
+
+                if (holdingC) {
+                    player.isLifespanCharging = true;
+                    player.lifespanLevel += dt * 2.0f; 
+                    if (player.lifespanLevel > 4.0f) player.lifespanLevel = 4.0f; 
+                } else {
+                    player.isLifespanCharging = false;
+                    player.lifespanLevel -= dt * 4.0f; 
+                    if (player.lifespanLevel < 0.0f) player.lifespanLevel = 0.0f; 
+                }
+
+                // Trigger cast on LMB Release!
+                if (IsMouseButtonReleased(0)) {
+                    ExecuteSpell(&player, worldMouse, &active->spell, 1.0f + player.chargeLevel, 1.0f + player.lifespanLevel);
                     player.chargeLevel = 0.0f;
+                    player.lifespanLevel = 0.0f;
                 }
             } 
             else if (active->type == ITEM_NPC) {
@@ -164,6 +188,8 @@ int main() {
                 if (nrgAlpha > 0.01f) DrawEnergyRealm(nrgAlpha);
                 if (hazAlpha > 0.01f) DrawHazardRealm(hazAlpha);
                 
+                DrawSingularities(1.0f); // Render the Space-Time anomalies!
+
                 DrawNPCs(); 
                 DrawProjectiles(&player);
                 DrawPlayerEntity(&player); 

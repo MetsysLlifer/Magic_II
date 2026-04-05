@@ -3,21 +3,24 @@
 Cell grid[2][WIDTH * HEIGHT];
 Cell prev_grid[2][WIDTH * HEIGHT];
 Projectile projectiles[100];
+Singularity sys_singularities[20];
+int sys_sigCount = 0;
 
 void ResetGame(Player *p) {
     InitSimulation();
     InitNPCs();
     p->pos = (Vector2){WORLD_W / 2.0f, WORLD_H / 2.0f}; 
     p->z = 0.0f; p->zVelocity = 0.0f; p->health = p->maxHealth;
-    p->isJumping = false; p->chargeLevel = 0.0f; p->isCharging = false; p->draggingNodeId = -1;
+    p->isJumping = false; p->chargeLevel = 0.0f; p->lifespanLevel = 0.0f;
+    p->isCharging = false; p->isLifespanCharging = false; p->draggingNodeId = -1;
     for(int i=0; i<10; i++) p->editStates[i] = false;
+    sys_sigCount = 0;
 }
 
 bool IsDescendant(SigilGraph *g, int child, int root) {
     if(child == root) return true;
     int curr = g->nodes[child].parentId;
-    int depth = 0; // Prevent infinite loops
-    // FIX: Strict bounds checking prevents memory access crashes
+    int depth = 0; 
     while(curr >= 0 && curr < MAX_NODES && depth < MAX_NODES) {
         if(curr == root) return true;
         curr = g->nodes[curr].parentId;
@@ -29,12 +32,10 @@ bool IsDescendant(SigilGraph *g, int child, int root) {
 float GetNodeMagnitude(SigilGraph *g, int child, int root, Vector2 *outDir, float *resonance) {
     if(child == root) { *outDir = (Vector2){0,0}; *resonance = 1.0f; return 5.0f; }
     
-    // FIX: Ensure parent access is safe
     int pId = g->nodes[child].parentId;
     if(pId < 0 || pId >= MAX_NODES) { *outDir = (Vector2){0,0}; *resonance = 1.0f; return 1.0f; }
 
-    Vector2 p1 = g->nodes[child].pos;
-    Vector2 p2 = g->nodes[pId].pos;
+    Vector2 p1 = g->nodes[child].pos; Vector2 p2 = g->nodes[pId].pos;
     float dx = p1.x - p2.x; float dy = p1.y - p2.y;
     float dist = sqrtf(dx*dx + dy*dy);
     
@@ -42,15 +43,14 @@ float GetNodeMagnitude(SigilGraph *g, int child, int root, Vector2 *outDir, floa
     else { outDir->x = 0; outDir->y = 0; }
     
     float phase = dist * 0.1f + g->nodes[child].charge * 0.05f;
-    *resonance = 1.0f + 0.5f * sinf(phase); 
-
+    *resonance = 1.0f + 0.8f * sinf(phase); 
     return (dist / 40.0f) + 1.0f;
 }
 
 void CompileSigilGraph(SpellDNA *dna) {
     dna->temp = 20.0f; dna->density = 0.0f; dna->moisture = 0.0f; 
     dna->cohesion = 0.0f; dna->charge = 0.0f; dna->velocity = (Vector2){0,0};
-    dna->movement = MOVE_STRAIGHT; dna->isPermanent = false;
+    dna->movement = MOVE_STRAIGHT; 
     
     if (dna->graph.nodes[0].active) dna->movement = dna->graph.nodes[0].movement;
 
@@ -58,10 +58,8 @@ void CompileSigilGraph(SpellDNA *dna) {
         if (!dna->graph.nodes[i].active) continue;
         SpellNode n = dna->graph.nodes[i];
         
-        Vector2 dir = {0, 0}; float resonance = 1.0f;
-        float magnitude = 1.0f;
+        Vector2 dir = {0, 0}; float resonance = 1.0f; float magnitude = 1.0f;
 
-        // FIX: Strict array bounds check before looking up parentId
         if (n.parentId >= 0 && n.parentId < MAX_NODES && dna->graph.nodes[n.parentId].active) {
             magnitude = GetNodeMagnitude(&dna->graph, i, 0, &dir, &resonance);
         }
@@ -77,13 +75,10 @@ void CompileSigilGraph(SpellDNA *dna) {
             dna->velocity.x += dir.x * force; dna->velocity.y += dir.y * force;
         }
     }
-    if (dna->temp > 150.0f && dna->charge > 100.0f) dna->form = FORM_BEAM; 
-    if (dna->cohesion > 150.0f && dna->density > 100.0f) dna->isPermanent = true;
 }
 
 void InitSimulation() {
-    memset(grid, 0, sizeof(grid));
-    memset(prev_grid, 0, sizeof(prev_grid));
+    memset(grid, 0, sizeof(grid)); memset(prev_grid, 0, sizeof(prev_grid));
     for(int i=0; i<100; i++) projectiles[i].active = false;
 
     for(int y=0; y<HEIGHT; y++) {
@@ -126,9 +121,10 @@ void Diffuse(float dt) {
                     float thermalRate = base_rate * 1.5f;
                     grid[z][i].temp = (prev_grid[z][i].temp + thermalRate * (grid[z][i-1].temp + grid[z][i+1].temp + grid[z][i-WIDTH].temp + grid[z][i+WIDTH].temp)) / (1 + 4 * thermalRate);
                     grid[z][i].charge = (prev_grid[z][i].charge + thermalRate * (grid[z][i-1].charge + grid[z][i+1].charge + grid[z][i-WIDTH].charge + grid[z][i+WIDTH].charge)) / (1 + 4 * thermalRate);
-                    if (grid[z][i].permanent && grid[z][i].cohesion > 80.0f) continue;
                     
-                    float spread = fmax(0.0f, 1.0f - (grid[z][i].cohesion / 100.0f));
+                    if (grid[z][i].permanent) continue;
+                    
+                    float spread = fmax(0.0f, 1.0f - (fabsf(grid[z][i].cohesion) / 100.0f));
                     float rate = base_rate * spread;
                     if (spread > 0.05f) {
                         grid[z][i].density = (prev_grid[z][i].density + rate * (grid[z][i-1].density + grid[z][i+1].density + grid[z][i-WIDTH].density + grid[z][i+WIDTH].density)) / (1 + 4 * rate);
@@ -145,6 +141,36 @@ void UpdateSimulation(float dt, Player *p) {
     Diffuse(dt);
     p->animTime += dt;
 
+    // --- TRUE QUANTUM SINGULARITY SCAN ---
+    sys_sigCount = 0;
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        // High density threshold requires active resonance to achieve!
+        if (grid[LAYER_GROUND][i].density > 300.0f) {
+            if (sys_sigCount < 20) {
+                if (grid[LAYER_GROUND][i].cohesion > 150.0f) {
+                    sys_singularities[sys_sigCount++] = (Singularity){i, {(i % WIDTH) * PIXEL_SIZE, (i / WIDTH) * PIXEL_SIZE}, grid[LAYER_GROUND][i].density, grid[LAYER_GROUND][i].charge, 1, -1, p->animTime};
+                } else if (grid[LAYER_GROUND][i].cohesion < -150.0f) {
+                    sys_singularities[sys_sigCount++] = (Singularity){i, {(i % WIDTH) * PIXEL_SIZE, (i / WIDTH) * PIXEL_SIZE}, grid[LAYER_GROUND][i].density, grid[LAYER_GROUND][i].charge, 2, -1, p->animTime};
+                }
+            }
+        }
+    }
+
+    // RESOLVE ENTANGLEMENT: Frequencies must match within 5 units!
+    for(int i=0; i<sys_sigCount; i++) {
+        if(sys_singularities[i].type == 1) { // Black Hole
+            for(int j=0; j<sys_sigCount; j++) {
+                if(sys_singularities[j].type == 2) { // White Hole
+                    if(fabsf(sys_singularities[i].charge - sys_singularities[j].charge) < 5.0f) {
+                        sys_singularities[i].linkedTo = j;
+                        sys_singularities[j].linkedTo = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
         for (int z = 0; z < 2; z++) {
             if (grid[z][i].temp > 20.0f) grid[z][i].temp *= 0.99f; 
@@ -155,6 +181,9 @@ void UpdateSimulation(float dt, Player *p) {
                 grid[z][i].moisture *= 0.99f;
                 if (grid[z][i].temp > 80.0f && grid[z][i].cohesion > 30.0f) grid[z][i].cohesion -= 0.5f; 
                 if (grid[z][i].temp < 0.0f && grid[z][i].cohesion < 90.0f && grid[z][i].moisture > 10.0f) grid[z][i].cohesion += 1.0f; 
+                
+                // Hawking Radiation: Singularities evaporate to prevent permanent world-locks
+                if (grid[z][i].density > 300.0f) grid[z][i].density -= 10.0f * dt;
             }
 
             if (fabsf(grid[z][i].velocity.x) > 1.0f || fabsf(grid[z][i].velocity.y) > 1.0f) {
@@ -181,6 +210,73 @@ void UpdateSimulation(float dt, Player *p) {
             grid[LAYER_GROUND][i].temp *= 0.9f; grid[LAYER_GROUND][i].density *= 0.9f;
         }
         if (grid[LAYER_AIR][i].density < 10.0f && grid[LAYER_AIR][i].cohesion < 10.0f) grid[LAYER_AIR][i].density *= 0.95f; 
+    }
+
+    // SPATIAL BENDING & TELEPORTATION
+    for(int s=0; s<sys_sigCount; s++) {
+        Singularity sig = sys_singularities[s];
+        float forceMult = (sig.type == 2) ? -3500.0f : 3500.0f; // Push or Pull
+        int targetWH = sig.linkedTo;
+
+        float dx = p->pos.x - sig.pos.x; float dy = p->pos.y - sig.pos.y;
+        float distSq = dx*dx + dy*dy;
+        if (distSq > 0.1f && distSq < 250000.0f) { 
+            float dist = sqrtf(distSq);
+            float f = forceMult / (distSq * 0.02f + 1.0f);
+            p->pos.x -= (dx/dist) * f * dt; p->pos.y -= (dy/dist) * f * dt;
+            
+            // Event Horizon
+            if (sig.type == 1 && dist < 15.0f) {
+                if (targetWH != -1) {
+                    p->pos = sys_singularities[targetWH].pos; // TELEPORT!
+                } else {
+                    p->health -= 1000.0f; // Crushed
+                    grid[LAYER_GROUND][sig.index].density += 50.0f; 
+                }
+            }
+        }
+        
+        for(int n=0; n<50; n++) {
+            if(!active_npcs[n].active) continue;
+            float ndx = active_npcs[n].pos.x - sig.pos.x; float ndy = active_npcs[n].pos.y - sig.pos.y;
+            float ndistSq = ndx*ndx + ndy*ndy;
+            if(ndistSq > 0.1f && ndistSq < 250000.0f) {
+                float ndist = sqrtf(ndistSq);
+                float f = forceMult / (ndistSq * 0.02f + 1.0f);
+                active_npcs[n].pos.x -= (ndx/ndist) * f * dt; active_npcs[n].pos.y -= (ndy/ndist) * f * dt;
+                
+                if (sig.type == 1 && ndist < 15.0f) {
+                    if (targetWH != -1) {
+                        active_npcs[n].pos = sys_singularities[targetWH].pos;
+                    } else {
+                        active_npcs[n].health -= 1000.0f; 
+                        grid[LAYER_GROUND][sig.index].density += active_npcs[n].dna.mass; 
+                    }
+                }
+            }
+        }
+        
+        for(int pr=0; pr<100; pr++) {
+            if(!projectiles[pr].active) continue;
+            float pdx = projectiles[pr].pos.x - sig.pos.x; float pdy = projectiles[pr].pos.y - sig.pos.y;
+            float pdistSq = pdx*pdx + pdy*pdy;
+            if(pdistSq > 0.1f && pdistSq < 250000.0f) {
+                float pdist = sqrtf(pdistSq);
+                float f = forceMult / (pdistSq * 0.02f + 1.0f);
+                projectiles[pr].pos.x -= (pdx/pdist) * f * dt; projectiles[pr].pos.y -= (pdy/pdist) * f * dt;
+                
+                if (sig.type == 1 && pdist < 15.0f) {
+                    if (targetWH != -1) {
+                        projectiles[pr].pos = sys_singularities[targetWH].pos;
+                        projectiles[pr].basePos = projectiles[pr].pos;
+                        projectiles[pr].velocity.x *= -2.0f; projectiles[pr].velocity.y *= -2.0f; // Eject
+                    } else {
+                        projectiles[pr].active = false;
+                        grid[LAYER_GROUND][sig.index].density += projectiles[pr].payload.density; 
+                    }
+                } 
+            }
+        }
     }
 
     for(int i=0; i<100; i++) {
@@ -212,24 +308,25 @@ void UpdateSimulation(float dt, Player *p) {
                     for (int offset = -15; offset <= 15; offset += 15) {
                         float spreadAngle = baseAngle + (offset * PI / 180.0f);
                         Vector2 spreadTarget = { projectiles[i].pos.x + cosf(spreadAngle)*100.0f, projectiles[i].pos.y + sinf(spreadAngle)*100.0f };
-                        CastDynamicProjectile(projectiles[i].pos, spreadTarget, projectiles[i].layer, &projectiles[i].payload, n, projectiles[i].chargeMult);
+                        CastDynamicProjectile(projectiles[i].pos, spreadTarget, projectiles[i].layer, &projectiles[i].payload, n, projectiles[i].chargeMult, projectiles[i].lifeMult);
                     }
                     continue; 
-                } else if (node->spreadType == SPREAD_COLLISION) {
-                    triggerCollisionSpread = true;
-                }
+                } else if (node->spreadType == SPREAD_COLLISION) { triggerCollisionSpread = true; }
             }
             if(node->hasSpread && node->spreadType == SPREAD_INSTANT) continue; 
 
             Vector2 outDir; float resonance = 1.0f;
             float mag = GetNodeMagnitude(&projectiles[i].payload.graph, n, projectiles[i].rootId, &outDir, &resonance);
+            
+            // Intensify and Lifespan Multipliers!
             float cmult = projectiles[i].chargeMult;
+            float lmult = projectiles[i].lifeMult;
             
             projectiles[i].payload.temp += (node->temp * mag * cmult) * resonance; 
-            projectiles[i].payload.density += (node->density * mag * cmult) * resonance;
+            projectiles[i].payload.density += (node->density * mag * cmult * lmult) * resonance;
             projectiles[i].payload.moisture += (node->moisture * mag * cmult) * resonance; 
             projectiles[i].payload.charge += (node->charge * mag * cmult) * resonance;
-            projectiles[i].payload.cohesion = (projectiles[i].payload.cohesion == 0) ? node->cohesion : (projectiles[i].payload.cohesion + node->cohesion)/2.0f;
+            projectiles[i].payload.cohesion = (projectiles[i].payload.cohesion == 0) ? (node->cohesion * lmult) : (projectiles[i].payload.cohesion + node->cohesion * lmult)/2.0f;
             
             if(node->hasSize) projectiles[i].payload.sizeMod *= (node->sizeMod * cmult);
             if(node->hasDistort) projectiles[i].payload.distortion += node->distortion;
@@ -240,17 +337,20 @@ void UpdateSimulation(float dt, Player *p) {
                     float easeProg = fminf(1.0f, (t - delay) / node->easeTime);
                     float easeOut = 1.0f - (1.0f - easeProg) * (1.0f - easeProg); 
                     currentSpeedMod *= 1.0f + (node->speedMod - 1.0f) * easeOut;
-                } else {
-                    currentSpeedMod *= node->speedMod;
-                }
+                } else { currentSpeedMod *= node->speedMod; }
             }
         }
         
-        projectiles[i].velocity.x = projectiles[i].baseVelocity.x * currentSpeedMod;
-        projectiles[i].velocity.y = projectiles[i].baseVelocity.y * currentSpeedMod;
+        // CORE DELAY MECHANIC (Mines/Traps): Freeze entirely in mid air!
+        if (projectiles[i].payload.graph.nodes[projectiles[i].rootId].hasDelay && t < projectiles[i].payload.graph.nodes[projectiles[i].rootId].delay) {
+            projectiles[i].velocity = (Vector2){0,0};
+        } else {
+            projectiles[i].velocity.x = projectiles[i].baseVelocity.x * currentSpeedMod;
+            projectiles[i].velocity.y = projectiles[i].baseVelocity.y * currentSpeedMod;
+            projectiles[i].basePos.x += projectiles[i].velocity.x * dt;
+            projectiles[i].basePos.y += projectiles[i].velocity.y * dt;
+        }
 
-        projectiles[i].basePos.x += projectiles[i].velocity.x * dt;
-        projectiles[i].basePos.y += projectiles[i].velocity.y * dt;
         projectiles[i].life -= dt; projectiles[i].animOffset += dt * 15.0f; 
 
         if (projectiles[i].payload.movement == MOVE_SIN) {
@@ -300,7 +400,7 @@ void UpdateSimulation(float dt, Player *p) {
                     if(cNode->active && IsDescendant(&projectiles[i].payload.graph, n, projectiles[i].rootId) && cNode->hasSpread && cNode->spreadType == SPREAD_COLLISION && !cNode->triggered) {
                         for(int k=0; k<3; k++) {
                             Vector2 randTarget = { projectiles[i].pos.x + GetRandomValue(-100,100), projectiles[i].pos.y + GetRandomValue(-100,100) };
-                            CastDynamicProjectile(projectiles[i].pos, randTarget, projectiles[i].layer, &projectiles[i].payload, n, projectiles[i].chargeMult);
+                            CastDynamicProjectile(projectiles[i].pos, randTarget, projectiles[i].layer, &projectiles[i].payload, n, projectiles[i].chargeMult, projectiles[i].lifeMult);
                         }
                     }
                 }
@@ -322,19 +422,20 @@ void UpdateSimulation(float dt, Player *p) {
     }
 }
 
-void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMult) {
+void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMult, float lifeMult) {
     if(!dna->graph.nodes[0].active) return;
     
     SpellDNA immediate = {0};
     immediate.temp = 20.0f; immediate.sizeMod = 1.0f;
-    
     Vector2 dummyDir; float res; 
     
     for(int n=0; n<MAX_NODES; n++) {
         if(dna->graph.nodes[n].active) {
             float mag = GetNodeMagnitude(&dna->graph, n, 0, &dummyDir, &res);
             immediate.temp += dna->graph.nodes[n].temp * mag * chargeMult * res;
-            immediate.density += dna->graph.nodes[n].density * mag * chargeMult * res;
+            immediate.density += dna->graph.nodes[n].density * mag * chargeMult * lifeMult * res;
+            immediate.cohesion += dna->graph.nodes[n].cohesion * lifeMult;
+            immediate.charge += dna->graph.nodes[n].charge * mag * chargeMult * res;
             if(dna->graph.nodes[n].hasSize) immediate.sizeMod *= dna->graph.nodes[n].sizeMod * chargeMult;
         }
     }
@@ -344,23 +445,19 @@ void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMult) {
     int radius = (int)(1 + chargeMult) * immediate.sizeMod;
 
     switch(dna->form) {
-        case FORM_PROJECTILE:
-            CastDynamicProjectile(p->pos, target, p->castLayer, dna, 0, chargeMult);
-            break;
+        case FORM_PROJECTILE: CastDynamicProjectile(p->pos, target, p->castLayer, dna, 0, chargeMult, lifeMult); break;
         case FORM_MANIFEST: InjectEnergyArea(gx, gy, p->castLayer, radius + 1, immediate); break;
         case FORM_AURA: InjectEnergyArea(px, py, p->castLayer, radius + 3, immediate); break;
         case FORM_BEAM: InjectBeam(p->pos, target, p->castLayer, immediate); break;
     }
 }
 
-void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *dna, int rootId, float chargeMult) {
+void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *dna, int rootId, float chargeMult, float lifeMult) {
     for(int i=0; i<100; i++) {
         if(!projectiles[i].active) {
-            projectiles[i].pos = start;
-            projectiles[i].basePos = start;
-            projectiles[i].payload = *dna; 
-            projectiles[i].rootId = rootId;
-            projectiles[i].chargeMult = chargeMult;
+            projectiles[i].pos = start; projectiles[i].basePos = start;
+            projectiles[i].payload = *dna; projectiles[i].rootId = rootId;
+            projectiles[i].chargeMult = chargeMult; projectiles[i].lifeMult = lifeMult;
             projectiles[i].layer = layer;
             
             for(int n=0; n<MAX_NODES; n++) projectiles[i].payload.graph.nodes[n].triggered = false;
@@ -371,17 +468,15 @@ void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *d
             float accumulatedRange = 1.0f;
             for(int n=0; n<MAX_NODES; n++) if(dna->graph.nodes[n].active && dna->graph.nodes[n].hasRange && IsDescendant(&dna->graph, n, rootId)) accumulatedRange *= dna->graph.nodes[n].rangeMod;
 
-            projectiles[i].life = baseLife * accumulatedRange; 
+            projectiles[i].life = baseLife * accumulatedRange * lifeMult; 
             projectiles[i].maxLife = projectiles[i].life; 
             projectiles[i].flightTime = 0.0f;
-            projectiles[i].active = true;
-            projectiles[i].animOffset = 0.0f;
+            projectiles[i].active = true; projectiles[i].animOffset = 0.0f;
             
             float angle = atan2f(target.y - start.y, target.x - start.x);
             float cosA = cosf(angle); float sinA = sinf(angle);
             
-            Vector2 localV = {0};
-            Vector2 dummyDir; float res; 
+            Vector2 localV = {0}; Vector2 dummyDir; float res; 
             for(int n=0; n<MAX_NODES; n++) {
                 if(dna->graph.nodes[n].active && IsDescendant(&dna->graph, n, rootId)) {
                     float mag = GetNodeMagnitude(&dna->graph, n, rootId, &dummyDir, &res);
@@ -389,12 +484,9 @@ void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *d
                     localV.x += dummyDir.x * force; localV.y += dummyDir.y * force;
                 }
             }
-            
             if (fabsf(localV.x) < 10.0f && fabsf(localV.y) < 10.0f) { localV.x = 50.0f; }
 
-            float rotatedVx = localV.x * cosA - localV.y * sinA;
-            float rotatedVy = localV.x * sinA + localV.y * cosA;
-
+            float rotatedVx = localV.x * cosA - localV.y * sinA; float rotatedVy = localV.x * sinA + localV.y * cosA;
             projectiles[i].baseVelocity = (Vector2){ (cosA * 350.0f) + rotatedVx, (sinA * 350.0f) + rotatedVy };
             projectiles[i].velocity = projectiles[i].baseVelocity; 
             break;
@@ -405,9 +497,7 @@ void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *d
 void InjectBeam(Vector2 start, Vector2 target, int z, SpellDNA dna) {
     float dx = target.x - start.x; float dy = target.y - start.y;
     float dist = sqrtf(dx*dx + dy*dy) * dna.rangeMod;
-    
     if (dist <= 0.01f) return;
-    
     float steps = dist / PIXEL_SIZE;
     if (steps <= 0.001f) return;
     

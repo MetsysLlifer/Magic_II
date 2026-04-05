@@ -53,47 +53,42 @@ typedef struct SigilGraph {
 
 typedef struct {
     float temp; float density; float moisture; float cohesion; float charge; Vector2 velocity;  
-    int form; int movement; bool isPermanent;
-    
+    int form; int movement; 
     float speedMod; float delay; float distortion; float rangeMod; float sizeMod; int spreadType;
-    
     SigilGraph graph; 
 } SpellDNA;
 
-typedef struct {
-    float mass; float aero; float hydro; float terrestrial; float intelligence; float hostility;    
-} NPCDNA;
-
-typedef struct {
-    ItemType type;
-    SpellDNA spell;
-    NPCDNA npc;
-} HotbarSlot;
+typedef struct { float mass; float aero; float hydro; float terrestrial; float intelligence; float hostility; } NPCDNA;
+typedef struct { ItemType type; SpellDNA spell; NPCDNA npc; } HotbarSlot;
 
 typedef struct {
     Vector2 pos; Vector2 basePos; Vector2 baseVelocity; Vector2 velocity; SpellDNA payload; 
-    int rootId; float chargeMult;
+    int rootId; float chargeMult; float lifeMult; // NEW: Lifespan Multiplier stored in flight
     int layer; float life; float maxLife; bool active; float animOffset; 
     float flightTime; 
 } Projectile;
 
+typedef struct { Vector2 pos; float z; Vector2 velocity; float zVelocity; NPCDNA dna; float health; float animTime; bool active; } NPC;
+
+// NEW: Exposing Singularities globally for UI rendering
 typedef struct {
-    Vector2 pos; float z; Vector2 velocity; float zVelocity; NPCDNA dna; float health; float animTime; bool active;
-} NPC;
+    int index; Vector2 pos; float mass; float charge; int type; int linkedTo; float anim;
+} Singularity;
 
 typedef struct {
     Vector2 pos; float z; float zVelocity; bool isJumping; float animTime; float speed; float health; float maxHealth;
     int activeSlot;
     HotbarSlot hotbar[10]; 
     
-    float chargeLevel; bool isCharging;   
+    float chargeLevel;   // Intensity (LMB)
+    float lifespanLevel; // Duration/Permanence (C key)
+    bool isCharging;   
+    bool isLifespanCharging;
+
     bool isCrafting; bool showGuide; float visionBlend; int castLayer; 
     bool friendlyFire; 
 
-    int selectedNodeId;
-    int draggingNodeId; 
-    int craftCategory; 
-    
+    int selectedNodeId; int draggingNodeId; int craftCategory; 
     bool editStates[10]; 
 
     Camera2D craftCamera;
@@ -104,6 +99,8 @@ extern Cell grid[2][WIDTH * HEIGHT];
 extern Cell prev_grid[2][WIDTH * HEIGHT];
 extern Projectile projectiles[100];
 extern NPC active_npcs[50];
+extern Singularity sys_singularities[20];
+extern int sys_sigCount;
 
 void InitSimulation();
 void UpdateSimulation(float dt, Player *p); 
@@ -113,6 +110,7 @@ void ResetGame(Player *p);
 void DrawMaterialRealm(float alpha); 
 void DrawEnergyRealm(float alpha);   
 void DrawHazardRealm(float alpha);
+void DrawSingularities(float alpha); // NEW: Visualizer for Black/White Holes
 void DrawProjectiles(Player *p);
 void DrawPlayerEntity(Player *p); 
 void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse); 
@@ -122,8 +120,8 @@ void DrawNodeSigil(Vector2 center, SpellNode node, float scale, float animOffset
 void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float rot, float animOffset);
 
 void CompileSigilGraph(SpellDNA *dna);
-void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMultiplier);
-void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *dna, int rootId, float chargeMult);
+void ExecuteSpell(Player *p, Vector2 target, SpellDNA *dna, float chargeMultiplier, float lifeMultiplier);
+void CastDynamicProjectile(Vector2 start, Vector2 target, int layer, SpellDNA *dna, int rootId, float chargeMult, float lifeMult);
 void InjectEnergy(int x, int y, int z, SpellDNA dna);
 void InjectEnergyArea(int cx, int cy, int z, int radius, SpellDNA dna);
 void InjectBeam(Vector2 start, Vector2 target, int z, SpellDNA dna);

@@ -4,16 +4,11 @@
 
 void DeleteNodeRec(SigilGraph *graph, int id) {
     graph->nodes[id].active = false;
-    for(int i = 1; i < MAX_NODES; i++) {
-        if(graph->nodes[i].active && graph->nodes[i].parentId == id) {
-            DeleteNodeRec(graph, i);
-        }
-    }
+    for(int i = 1; i < MAX_NODES; i++) if(graph->nodes[i].active && graph->nodes[i].parentId == id) DeleteNodeRec(graph, i);
 }
 
 void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float rot, float animOffset) {
     if (!graph->nodes[0].active) return;
-    
     Vector2 corePos = graph->nodes[0].pos;
     float maxDist = 20.0f; 
     
@@ -23,17 +18,14 @@ void DrawCompositeSigil(Vector2 center, SigilGraph *graph, float scale, float ro
             if (d > maxDist) maxDist = d;
         }
     }
-    
     float mapScale = scale / maxDist;
     
     for(int i=1; i<MAX_NODES; i++) {
         if(graph->nodes[i].active && graph->nodes[i].parentId != -1) {
-            // FIX: Ensure safe array lookup for rendering
             int pId = graph->nodes[i].parentId;
             if (pId >= 0 && pId < MAX_NODES && graph->nodes[pId].active) {
                 Vector2 p1 = graph->nodes[i].pos; Vector2 p2 = graph->nodes[pId].pos;
                 Vector2 r1 = { p1.x - corePos.x, p1.y - corePos.y }; Vector2 r2 = { p2.x - corePos.x, p2.y - corePos.y };
-                
                 Vector2 f1 = { center.x + (r1.x*cosf(rot) - r1.y*sinf(rot))*mapScale, center.y + (r1.x*sinf(rot) + r1.y*cosf(rot))*mapScale };
                 Vector2 f2 = { center.x + (r2.x*cosf(rot) - r2.y*sinf(rot))*mapScale, center.y + (r2.x*sinf(rot) + r2.y*cosf(rot))*mapScale };
                 DrawLineEx(f1, f2, fmaxf(1.0f, scale*0.1f), Fade(SKYBLUE, 0.6f));
@@ -194,6 +186,46 @@ void DrawHazardRealm(float alpha) {
     }
 }
 
+// BEAUTIFUL BLACK HOLE & WHITE HOLE VISUALIZER
+void DrawSingularities(float alpha) {
+    for(int i=0; i<sys_sigCount; i++) {
+        Singularity s = sys_singularities[i];
+        float t = s.anim * 10.0f;
+        float radius = 15.0f + (s.mass / 50.0f);
+        
+        if (s.type == 1) { // BLACK HOLE
+            DrawCircle(s.pos.x, s.pos.y, radius * 0.6f, Fade(BLACK, alpha));
+            for(int r=0; r<5; r++) {
+                float angle = t + (r * PI / 2.5f);
+                DrawLineEx(s.pos, (Vector2){s.pos.x + cosf(angle)*radius, s.pos.y + sinf(angle)*radius}, 3.0f, Fade(PURPLE, alpha * 0.8f));
+                DrawCircleLines(s.pos.x, s.pos.y, radius - (fmodf(t + r*5, radius)), Fade(DARKPURPLE, alpha)); // Spiraling IN
+            }
+        } else { // WHITE HOLE
+            DrawCircle(s.pos.x, s.pos.y, radius * 0.4f, Fade(RAYWHITE, alpha));
+            for(int r=0; r<5; r++) {
+                float angle = -t + (r * PI / 2.5f);
+                DrawLineEx(s.pos, (Vector2){s.pos.x + cosf(angle)*radius*1.5f, s.pos.y + sinf(angle)*radius*1.5f}, 2.0f, Fade(SKYBLUE, alpha * 0.8f));
+                DrawCircleLines(s.pos.x, s.pos.y, fmodf(t + r*5, radius*1.5f), Fade(RAYWHITE, alpha)); // Spiraling OUT
+            }
+        }
+        
+        // ENTANGLEMENT TETHER (Quantum Link)
+        if (s.linkedTo != -1 && i < s.linkedTo) { // Draw once per pair
+            Vector2 p2 = sys_singularities[s.linkedTo].pos;
+            float dist = sqrtf(powf(p2.x - s.pos.x, 2) + powf(p2.y - s.pos.y, 2));
+            float phase = t * 5.0f;
+            int segments = (int)(dist / 10.0f);
+            for(int k=0; k<segments; k++) {
+                float lerp = (float)k / segments;
+                Vector2 mid = { s.pos.x + (p2.x - s.pos.x)*lerp, s.pos.y + (p2.y - s.pos.y)*lerp };
+                mid.y += sinf(phase + k) * 5.0f; // Wavy tether
+                DrawCircle(mid.x, mid.y, 2.0f, Fade(GOLD, alpha * 0.7f));
+            }
+            DrawText("ENTANGLED", s.pos.x - 20, s.pos.y - radius - 15, 10, Fade(GOLD, alpha));
+        }
+    }
+}
+
 void DrawProjectiles(Player *p) {
     for(int i=0; i<100; i++) {
         if(projectiles[i].active) {
@@ -221,26 +253,20 @@ void DrawPlayerEntity(Player *p) {
 
     DrawEllipse(p->pos.x, p->pos.y - p->z, currentWidth, currentHeight, RAYWHITE); 
 
-    if (p->isCharging && p->hotbar[p->activeSlot].type == ITEM_SPELL) {
-        float maxCharge = 3.0f;
-        float radius = 10.0f + (p->chargeLevel / maxCharge) * 30.0f;
-        float pulse = (sinf(p->animTime * 10.0f) + 1.0f) * 0.5f; 
-        
-        Vector2 cCenter = {p->pos.x, p->pos.y - p->z};
-        DrawCircleLines(cCenter.x, cCenter.y, radius + (pulse * 2), Fade(SKYBLUE, 0.5f + pulse * 0.5f));
-        DrawText(TextFormat("x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y, 10, GOLD);
-
-        SpellDNA *activeDNA = &p->hotbar[p->activeSlot].spell;
-        if (activeDNA->graph.nodes[0].charge > 10.0f) {
-            float t = GetTime() * 40.0f;
-            float sparkRadius = radius + 3.0f;
-            for(int i = 0; i < 3; i++) {
-                float angle = (t + i * 2.0f);
-                float ox = sinf(angle * 1.3f) * sparkRadius;
-                float oy = cosf(angle * 0.7f) * sparkRadius;
-                DrawLineEx(cCenter, (Vector2){cCenter.x + ox, cCenter.y + oy}, 1.5f, (Color){200, 150, 255, 255});
-            }
-        }
+    // DUAL CHANNEL CHARGING UI (Intensity vs Lifespan)
+    Vector2 cCenter = {p->pos.x, p->pos.y - p->z};
+    
+    if (p->isCharging) {
+        float radius = 10.0f + (p->chargeLevel / 4.0f) * 20.0f;
+        float pulse = (sinf(p->animTime * 15.0f) + 1.0f) * 0.5f; 
+        DrawCircleLines(cCenter.x, cCenter.y, radius + pulse, Fade(SKYBLUE, 0.8f));
+        DrawText(TextFormat("PWR x%.1f", 1.0f + p->chargeLevel), cCenter.x + radius + 5, cCenter.y - 5, 10, SKYBLUE);
+    }
+    if (p->isLifespanCharging) {
+        float radius = 15.0f + (p->lifespanLevel / 4.0f) * 20.0f;
+        float pulse = (sinf(p->animTime * -10.0f) + 1.0f) * 0.5f; 
+        DrawCircleLines(cCenter.x, cCenter.y, radius + pulse, Fade(GREEN, 0.8f));
+        DrawText(TextFormat("LIFE x%.1f", 1.0f + p->lifespanLevel), cCenter.x + radius + 5, cCenter.y + 5, 10, GREEN);
     }
 }
 
@@ -257,11 +283,8 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
     HotbarSlot *activeSlot = &p->hotbar[p->activeSlot];
     if (activeSlot->type == ITEM_SPELL) {
         DrawText("TYPE: ENERGY SCALAR", 15, 55, 10, SKYBLUE);
-        
-        // FIX: Copy valid data directly into dummy before compiling!
         SpellDNA dummy = activeSlot->spell;
         CompileSigilGraph(&dummy);
-        
         DrawText(TextFormat("Temp: %.0f | Mass: %.0f", dummy.temp, dummy.density), 15, 70, 10, RAYWHITE);
         DrawText(TextFormat("Cohe: %.0f | Wet: %.0f", dummy.cohesion, dummy.moisture), 15, 85, 10, RAYWHITE);
         DrawText(TextFormat("Chrg: %.0f", dummy.charge), 15, 100, 10, RAYWHITE);
@@ -293,9 +316,7 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                                (p->hotbar[i].spell.form == FORM_MANIFEST) ? "MNF" :
                                (p->hotbar[i].spell.form == FORM_AURA) ? "AUR" : "BEM";
             DrawText(fStr, slotRec.x + 6, slotRec.y + 18, 8, SKYBLUE);
-        } else {
-            DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, GREEN);
-        }
+        } else { DrawCircle(slotRec.x + 15, slotRec.y + 15, 5, GREEN); }
     }
 
     if (p->isCrafting && !p->showGuide) {
@@ -326,8 +347,8 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                 GuiSlider((Rectangle){80, ySp, 80, 10}, "MASS", NULL, &n->density, 0, 100);
                 int mV = (int)n->density; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp+=18;
 
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "COHE", NULL, &n->cohesion, 0, 100);
-                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &cV, 0, 100, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
+                GuiSlider((Rectangle){80, ySp, 80, 10}, "COHE", NULL, &n->cohesion, -200, 200);
+                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &cV, -200, 200, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
 
                 GuiSlider((Rectangle){80, ySp, 80, 10}, "WET", NULL, &n->moisture, 0, 100);
                 int wV = (int)n->moisture; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp+=18;
@@ -391,6 +412,7 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                 }
             }
             DrawText(TextFormat("MAX TIME: %.1fs", maxTime), 670, 100, 10, RAYWHITE);
+            DrawText("String Resonance: ACTIVE", 670, 120, 10, PURPLE);
 
             DrawText("INFINITE COMPILER CANVAS", 260, 65, 15, GOLD);
             if (CheckCollisionPointRec(virtualMouse, canvasBounds)) {
@@ -506,16 +528,15 @@ void DrawGuideMenu(Player *p, bool *wantsRestart) {
     DrawText("METSYS: ARCHITECTURE OF MAGIC", 120, 70, 20, GOLD);
     DrawText("--------------------------------------------------", 120, 90, 20, GRAY);
     
-    DrawText("VISION REALMS (Use [ and ] to blend):", 120, 120, 15, PURPLE);
-    DrawText("- 0.0 to 1.0: Blends from Material Reality into Energy Scalars.", 130, 145, 10, WHITE);
-    DrawText("- 1.0 to 2.0: Blends from Energy into HAZARD (Detective) Vision.", 130, 160, 10, WHITE);
+    DrawText("DUAL CHANNEL CASTING:", 120, 120, 15, SKYBLUE);
+    DrawText("- INTENSITY [Hold LMB]: Multiplies heat, mass, and velocity.", 130, 145, 10, WHITE);
+    DrawText("- LIFESPAN [Hold C]: Multiplies cohesion and duration (Release LMB to Cast).", 130, 160, 10, WHITE);
 
     DrawText("CONTROLS:", 120, 210, 15, SKYBLUE);
-    DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [Mouse 1]: Hold to Cast", 130, 235, 10, WHITE);
+    DrawText("- [W, A, S, D]: Move  |  [SPACE]: Jump  |  [ TAB ]: Change View", 130, 235, 10, WHITE);
     DrawText("- [SHIFT]: Toggle Cast Target (Ground vs Air)", 130, 250, 10, GREEN); 
     DrawText("- [ ` ]: Compiler   |   [ESC]: Guide", 130, 265, 10, WHITE);
-    DrawText("- [ TAB ]: Quick-Swap Vision or Crafting Category", 130, 280, 10, PURPLE);
-    DrawText("- [ F11 ]: Toggle Fullscreen", 130, 295, 10, GOLD); 
+    DrawText("- [ F11 ]: Toggle Fullscreen", 130, 280, 10, GOLD); 
 
-    if (GuiButton((Rectangle){ 130, 325, 150, 30 }, "RESTART WORLD")) *wantsRestart = true;
+    if (GuiButton((Rectangle){ 130, 315, 150, 30 }, "RESTART WORLD")) *wantsRestart = true;
 }
