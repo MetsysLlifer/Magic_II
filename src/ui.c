@@ -176,7 +176,7 @@ void DrawHazardRealm(float alpha) {
             }
         }
     }
-    for(int i=0; i<50; i++) {
+    for(int i=0; i<MAX_NPCS; i++) {
         if(active_npcs[i].active && active_npcs[i].dna.hostility > 50.0f) {
             Vector2 pCenter = {active_npcs[i].pos.x, active_npcs[i].pos.y - active_npcs[i].z};
             float pulse = (sinf(GetTime() * 10.0f) + 1.0f) * 0.5f;
@@ -188,10 +188,11 @@ void DrawHazardRealm(float alpha) {
 
 // BEAUTIFUL BLACK HOLE & WHITE HOLE VISUALIZER
 void DrawSingularities(float alpha) {
-    for(int i=0; i<sys_sigCount; i++) {
+    for(int i=0; i<MAX_SINGULARITIES; i++) {
+        if (!sys_singularities[i].active) continue;
         Singularity s = sys_singularities[i];
         float t = s.anim * 10.0f;
-        float radius = 15.0f + (s.mass / 50.0f);
+        float radius = s.radius;
         
         if (s.type == 1) { // BLACK HOLE
             DrawCircle(s.pos.x, s.pos.y, radius * 0.6f, Fade(BLACK, alpha));
@@ -210,7 +211,7 @@ void DrawSingularities(float alpha) {
         }
         
         // ENTANGLEMENT TETHER (Quantum Link)
-        if (s.linkedTo != -1 && i < s.linkedTo) { // Draw once per pair
+        if (s.linkedTo != -1 && s.linkedTo < MAX_SINGULARITIES && sys_singularities[s.linkedTo].active && i < s.linkedTo) { // Draw once per pair
             Vector2 p2 = sys_singularities[s.linkedTo].pos;
             float dist = sqrtf(powf(p2.x - s.pos.x, 2) + powf(p2.y - s.pos.y, 2));
             float phase = t * 5.0f;
@@ -227,7 +228,8 @@ void DrawSingularities(float alpha) {
 }
 
 void DrawProjectiles(Player *p) {
-    for(int i=0; i<100; i++) {
+    (void)p;
+    for(int i=0; i<MAX_PROJECTILES; i++) {
         if(projectiles[i].active) {
             int yOffset = (projectiles[i].layer == LAYER_AIR) ? FLOAT_OFFSET : 0;
             Vector2 pCenter = {projectiles[i].pos.x, projectiles[i].pos.y - yOffset};
@@ -270,7 +272,36 @@ void DrawPlayerEntity(Player *p) {
     }
 }
 
+static void DrawSpellCompendiumOverlay(void) {
+    DrawRectangle(85, 55, 630, 340, Fade(BLACK, 0.96f));
+    DrawRectangleLines(85, 55, 630, 340, GOLD);
+    DrawText("SPELL COMPENDIUM (F1)", 105, 65, 16, GOLD);
+
+    int y = 92;
+    DrawText("GEAR ABBREVIATIONS", 105, y, 12, SKYBLUE); y += 16;
+    DrawText("SPD: Speed modifier | DLY: Delay gate | SPR: Spread trigger", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("DST: Distortion wave | RNG: Range multiplier | SIZ: Size multiplier", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("SPR MODES: OFF (none), INST (instant fork), COLL (fork on collision)", 105, y, 10, RAYWHITE); y += 18;
+
+    DrawText("CONDITIONAL LOGIC", 105, y, 12, SKYBLUE); y += 16;
+    DrawText("COND ALW: Always active", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("COND T>: Activates if flight time is above threshold", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("COND S>/S<: Activates if selected scalar is above/below threshold", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("CH TMP/MAS/WET/COH/CHG: Target scalar channel for S>/S<", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("DETACH: Spawns detached child-core when condition succeeds", 105, y, 10, RAYWHITE); y += 18;
+
+    DrawText("TOOLCRAFT ABBREVIATIONS", 105, y, 12, SKYBLUE); y += 16;
+    DrawText("BLD build | DIG excavate | WET moisten | DRY dehydrate", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("HOT heat | COO cool | CON conduct charge", 105, y, 10, RAYWHITE); y += 14;
+    DrawText("BHO seed black hole | WHO seed white hole | PERSIST keeps effects", 105, y, 10, RAYWHITE); y += 18;
+
+    DrawText("GLOBAL FORM", 105, y, 12, SKYBLUE); y += 16;
+    DrawText("PRJ projectile | MNS manifest area | AUR aura around caster", 105, y, 10, RAYWHITE);
+}
+
 void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
+    if (IsKeyPressed(KEY_F1)) p->showCompendium = !p->showCompendium;
+
     DrawRectangle(10, 10, 200, 15, DARKGRAY);
     DrawRectangle(10, 10, (int)((fmax(0, p->health) / p->maxHealth) * 200), 15, RED);
     DrawRectangleLines(10, 10, 200, 15, WHITE);
@@ -334,66 +365,126 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
             SigilGraph *activeGraph = &activeSpell->graph; 
             Rectangle canvasBounds = {230, 60, 420, 340}; 
             DrawLine(220, 60, 220, 400, DARKGRAY);
+            Rectangle leftPanel = {36, 60, 184, 332};
+            DrawRectangleLinesEx(leftPanel, 1.0f, Fade(SKYBLUE, 0.35f));
+            if (GuiButton((Rectangle){668, 372, 90, 20}, p->showCompendium ? "HIDE INFO" : "COMPEND")) p->showCompendium = !p->showCompendium;
 
+            BeginScissorMode((int)leftPanel.x, (int)leftPanel.y, (int)leftPanel.width, (int)leftPanel.height);
             DrawText("SCALARS & BEHAVIOR", 40, 65, 12, GOLD);
             if (p->selectedNodeId != -1 && activeGraph->nodes[p->selectedNodeId].active) {
                 SpellNode *n = &activeGraph->nodes[p->selectedNodeId];
                 DrawText(TextFormat("ID: %d", p->selectedNodeId), 40, 80, 10, SKYBLUE);
-                
+
                 int ySp = 95;
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "TEMP", NULL, &n->temp, -100, 200);
-                int tV = (int)n->temp; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &tV, -100, 200, p->editStates[0])) p->editStates[0] = !p->editStates[0]; n->temp = tV; ySp+=18;
+                GuiSlider((Rectangle){80, ySp, 78, 10}, "TEMP", NULL, &n->temp, -100, 200);
+                int tV = (int)n->temp; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &tV, -100, 200, p->editStates[0])) p->editStates[0] = !p->editStates[0]; n->temp = tV; ySp+=18;
 
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "MASS", NULL, &n->density, 0, 100);
-                int mV = (int)n->density; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp+=18;
+                GuiSlider((Rectangle){80, ySp, 78, 10}, "MASS", NULL, &n->density, 0, 100);
+                int mV = (int)n->density; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &mV, 0, 100, p->editStates[1])) p->editStates[1] = !p->editStates[1]; n->density = mV; ySp+=18;
 
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "COHE", NULL, &n->cohesion, -200, 200);
-                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &cV, -200, 200, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
+                GuiSlider((Rectangle){80, ySp, 78, 10}, "COHE", NULL, &n->cohesion, -200, 200);
+                int cV = (int)n->cohesion; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &cV, -200, 200, p->editStates[2])) p->editStates[2] = !p->editStates[2]; n->cohesion = cV; ySp+=18;
 
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "WET", NULL, &n->moisture, 0, 100);
-                int wV = (int)n->moisture; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp+=18;
+                GuiSlider((Rectangle){80, ySp, 78, 10}, "WET", NULL, &n->moisture, 0, 100);
+                int wV = (int)n->moisture; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &wV, 0, 100, p->editStates[3])) p->editStates[3] = !p->editStates[3]; n->moisture = wV; ySp+=18;
 
-                GuiSlider((Rectangle){80, ySp, 80, 10}, "CHRG", NULL, &n->charge, 0, 100);
-                int hV = (int)n->charge; if(GuiValueBox((Rectangle){170, ySp-2, 35, 14}, NULL, &hV, 0, 100, p->editStates[4])) p->editStates[4] = !p->editStates[4]; n->charge = hV;
+                GuiSlider((Rectangle){80, ySp, 78, 10}, "CHRG", NULL, &n->charge, 0, 100);
+                int hV = (int)n->charge; if(GuiValueBox((Rectangle){162, ySp-2, 40, 14}, NULL, &hV, 0, 100, p->editStates[4])) p->editStates[4] = !p->editStates[4]; n->charge = hV;
 
-                DrawLine(40, 190, 230, 190, DARKGRAY);
+                DrawLine(40, 190, 220, 190, DARKGRAY);
 
                 DrawText("ATTACH BEHAVIOR GEARS:", 40, 195, 10, SKYBLUE);
-                GuiToggle((Rectangle){40, 205, 30, 15}, "SPD", &n->hasSpeed);
-                GuiToggle((Rectangle){75, 205, 30, 15}, "DLY", &n->hasDelay);
-                GuiToggle((Rectangle){110, 205, 30, 15}, "SPR", &n->hasSpread);
-                GuiToggle((Rectangle){145, 205, 30, 15}, "DST", &n->hasDistort);
-                GuiToggle((Rectangle){180, 205, 30, 15}, "RNG", &n->hasRange);
-                GuiToggle((Rectangle){215, 205, 30, 15}, "SIZ", &n->hasSize);
+                GuiToggle((Rectangle){40, 205, 26, 15}, "SPD", &n->hasSpeed);
+                GuiToggle((Rectangle){69, 205, 26, 15}, "DLY", &n->hasDelay);
+                GuiToggle((Rectangle){98, 205, 26, 15}, "SPR", &n->hasSpread);
+                GuiToggle((Rectangle){127, 205, 26, 15}, "DST", &n->hasDistort);
+                GuiToggle((Rectangle){156, 205, 26, 15}, "RNG", &n->hasRange);
+                GuiToggle((Rectangle){185, 205, 26, 15}, "SIZ", &n->hasSize);
 
                 int gY = 225;
-                if(n->hasSpeed) { 
-                    GuiSlider((Rectangle){80, gY, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f); gY+=15; 
-                    GuiSlider((Rectangle){80, gY, 120, 10}, "EASE", NULL, &n->easeTime, 0.0f, 3.0f); gY+=15; 
+                if(n->hasSpeed) {
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "SPEED", NULL, &n->speedMod, 0.1f, 3.0f); gY+=15;
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "EASE", NULL, &n->easeTime, 0.0f, 3.0f); gY+=15;
                 }
                 if(n->hasDelay) { GuiSlider((Rectangle){80, gY, 120, 10}, "DELAY", NULL, &n->delay, 0.0f, 5.0f); gY+=15; }
                 if(n->hasDistort) { GuiSlider((Rectangle){80, gY, 120, 10}, "DSTRT", NULL, &n->distortion, 0.0f, 100.0f); gY+=15; }
                 if(n->hasRange) { GuiSlider((Rectangle){80, gY, 120, 10}, "RANGE", NULL, &n->rangeMod, 0.1f, 5.0f); gY+=15; }
                 if(n->hasSize) { GuiSlider((Rectangle){80, gY, 120, 10}, "SIZE", NULL, &n->sizeMod, 0.1f, 5.0f); gY+=15; }
-                
+
                 if(n->hasSpread) {
                     DrawText("SPREAD TYPE:", 40, gY, 10, WHITE);
-                    if(GuiButton((Rectangle){40, gY+10, 45, 15}, "OFF")) n->spreadType = SPREAD_OFF;
-                    if(GuiButton((Rectangle){90, gY+10, 45, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
-                    if(GuiButton((Rectangle){140, gY+10, 45, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
-                    int sx = (n->spreadType == 0) ? 40 : (n->spreadType == 1) ? 90 : 140;
-                    DrawRectangleLines(sx, gY+10, 45, 15, PURPLE);
-                    gY+=30;
+                    if(GuiButton((Rectangle){40, gY+10, 42, 15}, "OFF")) n->spreadType = SPREAD_OFF;
+                    if(GuiButton((Rectangle){86, gY+10, 42, 15}, "INST")) n->spreadType = SPREAD_INSTANT;
+                    if(GuiButton((Rectangle){132, gY+10, 42, 15}, "COLL")) n->spreadType = SPREAD_COLLISION;
+                    int sx = (n->spreadType == SPREAD_OFF) ? 40 : (n->spreadType == SPREAD_INSTANT) ? 86 : 132;
+                    DrawRectangleLines(sx, gY+10, 42, 15, PURPLE);
+                    gY += 30;
                 }
 
-                DrawText("MOVE:", 40, 360, 10, WHITE);
-                if(GuiButton((Rectangle){40, 370, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
-                if(GuiButton((Rectangle){80, 370, 35, 15}, "SIN")) n->movement = MOVE_SIN;
-                if(GuiButton((Rectangle){120, 370, 35, 15}, "COS")) n->movement = MOVE_COS;
-                if(GuiButton((Rectangle){160, 370, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
-                int mx = (n->movement == 0) ? 40 : (n->movement == 1) ? 80 : (n->movement == 2) ? 120 : 160;
-                DrawRectangleLines(mx, 370, 35, 15, GREEN);
+                DrawText("COND:", 40, gY, 10, WHITE);
+                if(GuiButton((Rectangle){40, gY, 40, 15}, "ALW")) n->conditionType = COND_ALWAYS;
+                if(GuiButton((Rectangle){84, gY, 40, 15}, "T>")) n->conditionType = COND_FLIGHT_TIME_GT;
+                if(GuiButton((Rectangle){128, gY, 40, 15}, "S>")) n->conditionType = COND_SCALAR_GT;
+                if(GuiButton((Rectangle){172, gY, 40, 15}, "S<")) n->conditionType = COND_SCALAR_LT;
+                int csel = (n->conditionType == COND_ALWAYS) ? 40 :
+                           (n->conditionType == COND_FLIGHT_TIME_GT) ? 84 :
+                           (n->conditionType == COND_SCALAR_GT) ? 128 : 172;
+                DrawRectangleLines(csel, gY, 40, 15, GOLD);
+                gY += 18;
+
+                if(n->conditionType != COND_ALWAYS) {
+                    if(n->conditionType == COND_FLIGHT_TIME_GT) {
+                        GuiSlider((Rectangle){80, gY, 120, 10}, "TIME", NULL, &n->conditionThreshold, 0.0f, 8.0f);
+                        gY += 15;
+                    } else {
+                        DrawText("CH:", 40, gY, 10, WHITE);
+                        if(GuiButton((Rectangle){40, gY+10, 30, 14}, "TMP")) n->conditionChannel = SCALAR_TEMP;
+                        if(GuiButton((Rectangle){74, gY+10, 30, 14}, "MAS")) n->conditionChannel = SCALAR_DENSITY;
+                        if(GuiButton((Rectangle){108, gY+10, 30, 14}, "WET")) n->conditionChannel = SCALAR_MOISTURE;
+                        if(GuiButton((Rectangle){142, gY+10, 30, 14}, "COH")) n->conditionChannel = SCALAR_COHESION;
+                        if(GuiButton((Rectangle){176, gY+10, 30, 14}, "CHG")) n->conditionChannel = SCALAR_CHARGE;
+                        int clampedCh = n->conditionChannel;
+                        if (clampedCh < 0) clampedCh = 0;
+                        if (clampedCh >= SCALAR_COUNT) clampedCh = SCALAR_COUNT - 1;
+                        int cx = 40 + (clampedCh * 34);
+                        DrawRectangleLines(cx, gY+10, 30, 14, SKYBLUE);
+                        gY += 26;
+                        GuiSlider((Rectangle){80, gY, 120, 10}, "THR", NULL, &n->conditionThreshold, -250.0f, 350.0f);
+                        gY += 15;
+                    }
+                    GuiToggle((Rectangle){40, gY, 90, 15}, "DETACH", &n->detachOnCondition);
+                    gY += 18;
+                }
+
+                GuiToggle((Rectangle){40, gY, 85, 15}, "TOOL", &n->hasTool);
+                gY += 18;
+                if(n->hasTool) {
+                    DrawText("TOOL:", 40, gY, 10, WHITE);
+                    if(GuiButton((Rectangle){40, gY+10, 30, 14}, "BLD")) n->toolType = TOOL_BUILD;
+                    if(GuiButton((Rectangle){74, gY+10, 30, 14}, "DIG")) n->toolType = TOOL_DIG;
+                    if(GuiButton((Rectangle){108, gY+10, 30, 14}, "WET")) n->toolType = TOOL_MOISTEN;
+                    if(GuiButton((Rectangle){142, gY+10, 30, 14}, "DRY")) n->toolType = TOOL_DRY;
+                    if(GuiButton((Rectangle){40, gY+26, 30, 14}, "HOT")) n->toolType = TOOL_HEAT;
+                    if(GuiButton((Rectangle){74, gY+26, 30, 14}, "COO")) n->toolType = TOOL_COOL;
+                    if(GuiButton((Rectangle){108, gY+26, 30, 14}, "CON")) n->toolType = TOOL_CONDUCT;
+                    if(GuiButton((Rectangle){142, gY+26, 30, 14}, "BHO")) n->toolType = TOOL_SINGULARITY_BLACK;
+                    if(GuiButton((Rectangle){176, gY+26, 30, 14}, "WHO")) n->toolType = TOOL_SINGULARITY_WHITE;
+                    gY += 45;
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "PWR", NULL, &n->toolPower, 0.5f, 5.0f); gY += 15;
+                    GuiSlider((Rectangle){80, gY, 120, 10}, "RAD", NULL, &n->toolRadius, 1.0f, 12.0f); gY += 15;
+                    GuiToggle((Rectangle){40, gY, 100, 15}, "PERSIST", &n->toolPermanent); gY += 18;
+                }
+
+                int moveY = (gY > 345) ? gY : 345;
+                DrawText("MOVE:", 40, moveY, 10, WHITE);
+                if(GuiButton((Rectangle){40, moveY + 10, 35, 15}, "STR")) n->movement = MOVE_STRAIGHT;
+                if(GuiButton((Rectangle){80, moveY + 10, 35, 15}, "SIN")) n->movement = MOVE_SIN;
+                if(GuiButton((Rectangle){120, moveY + 10, 35, 15}, "COS")) n->movement = MOVE_COS;
+                if(GuiButton((Rectangle){160, moveY + 10, 35, 15}, "ORB")) n->movement = MOVE_ORBIT;
+                int mx = (n->movement == MOVE_STRAIGHT) ? 40 : (n->movement == MOVE_SIN) ? 80 : (n->movement == MOVE_COS) ? 120 : 160;
+                DrawRectangleLines(mx, moveY + 10, 35, 15, GREEN);
             }
+            EndScissorMode();
 
             DrawText("GLOBAL FORM:", 40, 395, 10, WHITE);
             if(GuiButton((Rectangle){110, 395, 30, 15}, "PRJ")) activeSpell->form = FORM_PROJECTILE;
@@ -434,15 +525,10 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                     else if (p->selectedNodeId != -1) {
                         for(int i=0; i<MAX_NODES; i++) {
                             if (!activeGraph->nodes[i].active) {
-                                activeGraph->nodes[i].active = true; activeGraph->nodes[i].parentId = p->selectedNodeId;
-                                activeGraph->nodes[i].pos = worldMouse; activeGraph->nodes[i].movement = MOVE_STRAIGHT;
-                                activeGraph->nodes[i].hasSpeed = false; activeGraph->nodes[i].hasDelay = false;
-                                activeGraph->nodes[i].hasSpread = false; activeGraph->nodes[i].hasDistort = false;
-                                activeGraph->nodes[i].hasRange = false; activeGraph->nodes[i].hasSize = false;
-                                activeGraph->nodes[i].speedMod = 1.0f; activeGraph->nodes[i].easeTime = 0.0f;
-                                activeGraph->nodes[i].delay = 0.0f; activeGraph->nodes[i].distortion = 0.0f;
-                                activeGraph->nodes[i].rangeMod = 1.0f; activeGraph->nodes[i].sizeMod = 1.0f;
-                                activeGraph->nodes[i].spreadType = 0;
+                                InitDefaultSpellNode(&activeGraph->nodes[i]);
+                                activeGraph->nodes[i].active = true;
+                                activeGraph->nodes[i].parentId = p->selectedNodeId;
+                                activeGraph->nodes[i].pos = worldMouse;
                                 p->selectedNodeId = i; break;
                             }
                         }
@@ -517,6 +603,10 @@ void DrawInterface(Player *p, NPCDNA *draftNPC, Vector2 virtualMouse) {
                 p->hotbar[p->activeSlot].npc = *draftNPC;
                 p->isCrafting = false;
             }
+        }
+
+        if (p->showCompendium) {
+            DrawSpellCompendiumOverlay();
         }
     }
 }

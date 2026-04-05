@@ -17,6 +17,50 @@ make
 make run
 ```
 
+## New Engine Notes
+
+This build now includes:
+
+- Dynamic scalar spell nodes with conditional logic gears.
+- Toolcraft actions (build, dig, moisten, heat, singularity seeding).
+- Persistent black/white hole lifecycle with entanglement pairing.
+- Ecosystem-reactive NPC steering (hazards + singularity-aware path intent).
+- Main menu flow: My World, Multiplayer, Others.
+- Local save persistence (`magic_world/savegame.bin`) with periodic autosave.
+- Multiplayer foundations: UDP internet host/client.
+
+## Main Menu
+
+At launch, the game opens into:
+
+- My World: loads local world progress if present.
+- Multiplayer: host or join an online session.
+- Others: quick compendium, utility actions, and save management.
+
+In-game shortcuts:
+
+- `F5`: save current My World progress.
+- `F9`: return to main menu.
+- `F11`: toggle fullscreen.
+
+## Multiplayer
+
+### Internet (UDP)
+
+Run one instance as host:
+
+```bash
+./metsys_engine --host
+```
+
+Run another instance as client:
+
+```bash
+./metsys_engine --join 127.0.0.1
+```
+
+Replace `127.0.0.1` with the host machine IP for LAN testing.
+
 ## Common issue: `raylib.h` / `raygui.h` not found
 
 If VS Code or compiler shows header-not-found errors, verify these files exist:
